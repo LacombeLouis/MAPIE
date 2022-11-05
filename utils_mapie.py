@@ -1,7 +1,4 @@
-
-import sys
-sys.path.append('../../')
-from utils.utils_numpy import get_binning_groups
+from utils_numpy import get_binning_groups
 
 import numpy as np
 import pandas as pd
@@ -119,12 +116,12 @@ def plot_prediction_intervals(
         capsize=5, marker="o", elinewidth=2, linewidth=0, color="red",
         label="Outside prediction interval"
         )
-    axs.scatter(
-        y_test_sorted_[warnings],
-        y_test_sorted_[warnings],
-        marker="*", color="green",
-        label="True value"
-    )
+    # axs.scatter(
+    #     y_test_sorted_[warnings],
+    #     y_test_sorted_[warnings],
+    #     marker="*", color="green",
+    #     label="True value"
+    # )
     axs.set_xlabel("True y values")
     axs.set_ylabel("Predicted y values")
     median_lim = np.median([axs.get_xlim()])
