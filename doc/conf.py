@@ -36,6 +36,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
+    "sphinx.ext.autosectionlabel",
     "sphinx.ext.viewcode",
     "sphinx.ext.mathjax",
     "numpydoc",
@@ -87,7 +88,7 @@ copyright = u"2022, Quantmetry"
 # built documents.
 #
 # The short X.Y version.
-version = "0.5.0"
+version = "0.7.0"
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -311,8 +312,18 @@ intersphinx_mapping = {
 
 # sphinx-gallery configuration
 sphinx_gallery_conf = {
-    "examples_dirs": ["../examples/regression", "../examples/classification"],
-    "gallery_dirs": ["examples_regression", "examples_classification"],
+    "examples_dirs": [
+        "../examples/regression",
+        "../examples/classification",
+        "../examples/multilabel_classification",
+        "../examples/calibration"
+    ],
+    "gallery_dirs": [
+        "examples_regression",
+        "examples_classification",
+        "examples_multilabel_classification",
+        "examples_calibration"
+    ],
     "doc_module": "mapie",
     "backreferences_dir": os.path.join("generated"),
     "reference_url": {"mapie": None},

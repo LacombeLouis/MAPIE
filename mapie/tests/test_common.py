@@ -12,9 +12,7 @@ from sklearn.utils.estimator_checks import parametrize_with_checks
 from sklearn.utils.validation import check_is_fitted
 
 from mapie.classification import MapieClassifier
-from mapie.regression import MapieRegressor
-from mapie.quantile_regression import MapieQuantileRegressor
-
+from mapie.regression import MapieQuantileRegressor, MapieRegressor
 
 X_toy = np.arange(18).reshape(-1, 1)
 y_toy = np.array(
@@ -110,7 +108,12 @@ def test_none_estimator(pack: Tuple[BaseEstimator, BaseEstimator]) -> None:
     MapieEstimator, DefaultEstimator = pack
     mapie_estimator = MapieEstimator(estimator=None)
     mapie_estimator.fit(X_toy, y_toy)
-    assert isinstance(mapie_estimator.single_estimator_, DefaultEstimator)
+    if isinstance(mapie_estimator, MapieClassifier):
+        assert isinstance(mapie_estimator.single_estimator_, DefaultEstimator)
+    if isinstance(mapie_estimator, MapieRegressor):
+        assert isinstance(
+            mapie_estimator.estimator_.single_estimator_, DefaultEstimator
+        )
 
 
 @pytest.mark.parametrize("estimator", [0, "a", KFold(), ["a", "b"]])

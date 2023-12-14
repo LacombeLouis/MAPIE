@@ -12,6 +12,8 @@ __pycache__/
 doc/_build/
 doc/examples_classification/
 doc/examples_regression/
+doc/examples_calibration/
+doc/examples_multilabel_classification/
 doc/auto_examples/
 doc/modules/generated/
 doc/datasets/generated/
@@ -76,6 +78,7 @@ target/
 
 # VSCode
 .vscode
+.idea/
 
 # Images
 *.jpeg

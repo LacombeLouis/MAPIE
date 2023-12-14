@@ -2,8 +2,69 @@
 History
 =======
 
+##### (##########)
+------------------
+* Add new checks for metrics calculations
+* Fix reference for residual normalised score in documentation
+
+
+0.7.0 (2023-09-14)
+------------------
+
+* Add prediction set estimation for binary classification.
+* Add Learn-Then-Test method for multilabel-classification.
+* Add documentation and notebooks for LTT.
+* Add a new conformity score, ResidualNormalisedScore, that takes X into account and allows to compute adaptive intervals.
+* Refactor MapieRegressor and ConformityScore to add the possibility to use X in ConformityScore.
+* Separate the handling of the estimator from MapieRegressor into a new class called EnsembleEstimator.
+* Rename methods (score to lac and cumulated_score to aps) in MapieClassifier.
+* Add more notebooks and examples.
+* Fix an unfixed random state in one of the classification tests.
+* Add statistical calibration tests in binary classification.
+* Fix and preserve the split behavior of the check_cv method with and without random state.
+
+0.6.5 (2023-06-06)
+------------------
+
+* Add grouped conditional coverage metrics named SSC for regression and classification
+* Add HSIC metric for regression
+* Migrate conformity scores classes into conformity_scores module
+* Migrate regression classes into regression module
+* Add split conformal option for regression and classification
+* Update check method for calibration
+* Fix bug in MapieClassifier with different number of labels in calibration dataset.
+
+0.6.4 (2023-04-05)
+------------------
+
+* Fix runtime warning with RAPS method
+
+0.6.3 (2023-03-23)
+------------------
+
+* Fix bug when labels do not start at 0
+
+0.6.2 (2023-03-22)
+------------------
+
+* Make MapieClassifier a scikit-learn object
+* Update documentation for MapieClassifier
+
+0.6.1 (2023-01-31)
+------------------
+
+* Fix still existing bug for classification with very low scores
+
+0.6.0 (2023-01-19)
+------------------
+
+* Add RCPS and CRC for multilabel-classification
+* Add Top-Label calibration
+* Fix bug for classification with very low scores
+
 0.5.0 (2022-10-20)
 ------------------
+
 * Add RAPS method for classification
 * Add theoretical description for RAPS
 

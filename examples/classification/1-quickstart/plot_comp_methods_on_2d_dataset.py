@@ -4,8 +4,8 @@ Comparing prediction sets on a two-dimensional dataset
 ======================================================
 
 In this tutorial, we compare the prediction sets estimated by
-:class:`~mapie.classification.MapieClassifier` with the "score"
-and "cumulated_score" on the two-dimensional dataset presented
+:class:`~mapie.classification.MapieClassifier` with the "lac"
+and "aps" on the two-dimensional dataset presented
 by Sadinle et al. (2019).
 """
 
@@ -47,18 +47,16 @@ by Sadinle et al. (2019).
 # Journal of the American Statistical Association, 114:525, 223-234, 2019.
 
 from typing import List
-import numpy as np
-from sklearn.naive_bayes import GaussianNB
-from sklearn.model_selection import train_test_split
+
 import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
 
-from mapie.classification import MapieClassifier
-from mapie.metrics import (
-    classification_coverage_score,
-    classification_mean_width_score
-)
 from mapie._typing import NDArray
-
+from mapie.classification import MapieClassifier
+from mapie.metrics import (classification_coverage_score,
+                           classification_mean_width_score)
 
 centers = [(0, 3.5), (-2, 0), (2, 0)]
 covs = [np.eye(2), np.eye(2) * 2, np.diag([5, 1])]
@@ -103,7 +101,7 @@ plt.show()
 ##############################################################################
 # We fit our training data with a Gaussian Naive Base estimator.
 # Then we apply :class:`~mapie.classification.MapieClassifier` in the
-# calibration data with the methods ``score`` and ``cumulated_score```
+# calibration data with the methods ``"lac"`` and ``"aps"```
 # to the estimator indicating that it has already been fitted with
 # `cv="prefit"`.
 # We then estimate the prediction sets with differents alpha values with a
@@ -114,7 +112,7 @@ y_pred = clf.predict(X_test)
 y_pred_proba = clf.predict_proba(X_test)
 y_pred_proba_max = np.max(y_pred_proba, axis=1)
 
-methods = ["score", "cumulated_score"]
+methods = ["lac", "aps"]
 mapie, y_pred_mapie, y_ps_mapie = {}, {}, {}
 alpha = [0.2, 0.1, 0.05]
 for method in methods:
@@ -233,12 +231,12 @@ for method in methods:
 
 
 ##############################################################################
-# For the "score" method, when the class coverage is not large enough, the
+# For the "lac" method, when the class coverage is not large enough, the
 # prediction sets can be empty when the model is uncertain at the border
 # between two labels. These null regions disappear for larger class coverages
 # but ambiguous classification regions arise with several labels included in
 # the prediction sets.
-# By definition, the "cumulated_score" method does not produce empty
+# By definition, the "aps" method does not produce empty
 # prediction sets. However, the prediction sets tend to be slightly bigger
 # in ambiguous regions.
 #
@@ -289,6 +287,6 @@ plt.show()
 
 ##############################################################################
 # It is seen that both methods give coverages close to the target coverages,
-# regardless of the :math:`\alpha` value. However, the "cumulated_score"
+# regardless of the :math:`\alpha` value. However, the "aps"
 # produces slightly bigger prediction sets, but without empty regions
 # (if the selection of the last label is not randomized).

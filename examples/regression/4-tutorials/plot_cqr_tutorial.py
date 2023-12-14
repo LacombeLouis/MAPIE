@@ -31,26 +31,22 @@ defined in the ``predict`` for these methods).
 
 import warnings
 
-from lightgbm import LGBMRegressor
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import TextArea, AnnotationBbox
-from matplotlib.ticker import FormatStrFormatter
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold
-from sklearn.datasets import fetch_california_housing
+from lightgbm import LGBMRegressor
+from matplotlib.offsetbox import AnnotationBbox, TextArea
+from matplotlib.ticker import FormatStrFormatter
 from scipy.stats import randint, uniform
+from sklearn.datasets import fetch_california_housing
+from sklearn.model_selection import KFold, RandomizedSearchCV, train_test_split
 
-from mapie.metrics import (
-    regression_coverage_score,
-    regression_mean_width_score
-    )
-from mapie.regression import MapieRegressor
+from mapie.metrics import (regression_coverage_score,
+                           regression_mean_width_score)
+from mapie.regression import MapieQuantileRegressor, MapieRegressor
 from mapie.subsample import Subsample
-from mapie.quantile_regression import MapieQuantileRegressor
 
-
-random_state = 23
+random_state = 18
 rng = np.random.default_rng(random_state)
 round_to = 3
 
@@ -130,16 +126,17 @@ estimator = LGBMRegressor(
 params_distributions = dict(
     num_leaves=randint(low=10, high=50),
     max_depth=randint(low=3, high=20),
-    n_estimators=randint(low=50, high=300),
+    n_estimators=randint(low=50, high=100),
     learning_rate=uniform()
 )
 optim_model = RandomizedSearchCV(
     estimator,
     param_distributions=params_distributions,
     n_jobs=-1,
-    n_iter=100,
+    n_iter=10,
     cv=KFold(n_splits=5, shuffle=True),
-    verbose=-1
+    verbose=0,
+    random_state=random_state
 )
 optim_model.fit(X_train, y_train)
 estimator = optim_model.best_estimator_
@@ -201,14 +198,14 @@ def plot_prediction_intervals(
     axs.errorbar(
         y_test_sorted_[~warnings],
         y_pred_sorted_[~warnings],
-        yerr=error[~warnings],
+        yerr=np.abs(error[~warnings]),
         capsize=5, marker="o", elinewidth=2, linewidth=0,
         label="Inside prediction interval"
         )
     axs.errorbar(
         y_test_sorted_[warnings],
         y_pred_sorted_[warnings],
-        yerr=error[warnings],
+        yerr=np.abs(error[warnings]),
         capsize=5, marker="o", elinewidth=2, linewidth=0, color="red",
         label="Outside prediction interval"
         )
@@ -269,10 +266,14 @@ coverage, width = {}, {}
 for strategy, params in STRATEGIES.items():
     if strategy == "cqr":
         mapie = MapieQuantileRegressor(estimator, **params)
-        mapie.fit(X_train, y_train, X_calib=X_calib, y_calib=y_calib)
+        mapie.fit(
+            X_train, y_train,
+            X_calib=X_calib, y_calib=y_calib,
+            random_state=random_state
+        )
         y_pred[strategy], y_pis[strategy] = mapie.predict(X_test)
     else:
-        mapie = MapieRegressor(estimator, **params)
+        mapie = MapieRegressor(estimator, **params, random_state=random_state)
         mapie.fit(X_train, y_train)
         y_pred[strategy], y_pis[strategy] = mapie.predict(X_test, alpha=0.2)
     (

@@ -12,8 +12,8 @@ Regression
    :template: class.rst
 
    regression.MapieRegressor
-   quantile_regression.MapieQuantileRegressor
-   time_series_regression.MapieTimeSeriesRegressor
+   regression.MapieQuantileRegressor
+   regression.MapieTimeSeriesRegressor
 
 Classification
 ==============
@@ -24,6 +24,24 @@ Classification
 
    classification.MapieClassifier
 
+Multi-Label Classification
+==========================
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   multi_label_classification.MapieMultiLabelClassifier
+
+Calibration
+===========
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   calibration.MapieCalibrator
+
 Metrics
 =======
 
@@ -31,10 +49,29 @@ Metrics
    :toctree: generated/
    :template: function.rst
    
-   metrics.regression_coverage_score
    metrics.classification_coverage_score
-   metrics.regression_mean_width_score
+   metrics.classification_coverage_score_v2
    metrics.classification_mean_width_score
+   metrics.classification_ssc
+   metrics.classification_ssc_score
+   metrics.cumulative_differences
+   metrics.expected_calibration_error
+   metrics.hsic
+   metrics.kolmogorov_smirnov_cdf
+   metrics.kolmogorov_smirnov_p_value
+   metrics.kolmogorov_smirnov_statistic
+   metrics.kuiper_cdf
+   metrics.kuiper_p_value
+   metrics.kuiper_statistic
+   metrics.length_scale
+   metrics.regression_coverage_score
+   metrics.regression_coverage_score_v2
+   metrics.regression_mean_width_score
+   metrics.regression_ssc
+   metrics.regression_ssc_score
+   metrics.spiegelhalter_p_value
+   metrics.spiegelhalter_statistic
+   metrics.top_label_ece
 
 Conformity scores
 =================
@@ -45,7 +82,7 @@ Conformity scores
 
    conformity_scores.AbsoluteConformityScore
    conformity_scores.GammaConformityScore
-
+   conformity_scores.ResidualNormalisedScore
 
 Resampling
 ==========

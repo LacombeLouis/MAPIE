@@ -1,9 +1,9 @@
 import codecs
+
 from setuptools import find_packages, setup
 
-
 DISTNAME = "MAPIE"
-VERSION = "0.5.0"
+VERSION = "0.7.0"
 DESCRIPTION = (
     "A scikit-learn-compatible module "
     "for estimating prediction intervals."
@@ -19,35 +19,15 @@ PROJECT_URLS = {
     "Source Code": "https://github.com/scikit-learn-contrib/MAPIE"
 }
 LICENSE = "new BSD"
-MAINTAINER = "V. Taquet, V. Blot, T. Morzadec, G. Martinon"
+MAINTAINER = "T. Cordier, V. Blot, L. Lacombe"
 MAINTAINER_EMAIL = (
-    "vtaquet@quantmetry.com, "
+    "tcordier@quantmetry.com, "
     "vblot@quantmetry.com, "
-    "tmorzadec@quantmetry.com, "
-    "gmartinon@quantmetry.com"
+    "llacombe@quantmetry.com"
 )
 PYTHON_REQUIRES = ">=3.7"
 PACKAGES = find_packages()
-INSTALL_REQUIRES = ["scikit-learn", "numpy>=1.21", "packaging"]
-EXTRAS_REQUIRE = {
-    "tests": [
-        "flake8",
-        "mypy",
-        "pandas",
-        "pytest",
-        "pytest-cov",
-        "typed-ast"
-    ],
-    "docs": [
-        "matplotlib",
-        "numpydoc",
-        "pandas",
-        "sphinx",
-        "sphinx-gallery",
-        "sphinx_rtd_theme",
-        "typing_extensions"
-    ]
-}
+INSTALL_REQUIRES = ["scikit-learn", "scipy", "numpy>=1.21", "packaging"]
 CLASSIFIERS = [
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
@@ -79,7 +59,6 @@ setup(
     packages=PACKAGES,
     python_requires=PYTHON_REQUIRES,
     install_requires=INSTALL_REQUIRES,
-    extras_require=EXTRAS_REQUIRE,
     classifiers=CLASSIFIERS,
     zip_safe=False  # the package can run out of an .egg file
 )

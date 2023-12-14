@@ -4,13 +4,21 @@ from typing import Any, Iterable, Optional, Tuple, Union, cast
 
 import numpy as np
 from sklearn.base import ClassifierMixin, RegressorMixin
-from sklearn.model_selection import BaseCrossValidator, KFold, LeaveOneOut
-from sklearn.utils.validation import _check_sample_weight, _num_features
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import (BaseCrossValidator, KFold, LeaveOneOut,
+                                     BaseShuffleSplit, ShuffleSplit,
+                                     train_test_split)
+from sklearn.pipeline import Pipeline
 from sklearn.utils import _safe_indexing
+from sklearn.utils.multiclass import type_of_target
+from sklearn.utils.validation import (_check_sample_weight, _num_features,
+                                      check_is_fitted, column_or_1d)
 
 from ._compatibility import np_quantile
-from .conformity_scores import AbsoluteConformityScore, ConformityScore
 from ._typing import ArrayLike, NDArray
+from .conformity_scores import AbsoluteConformityScore, ConformityScore
+
+SPLIT_STRATEGIES = ["uniform", "quantile", "array split"]
 
 
 def check_null_weight(
@@ -21,22 +29,22 @@ def check_null_weight(
 
     Parameters
     ----------
-    sample_weight : Optional[ArrayLike] of shape (n_samples,)
+    sample_weight: Optional[ArrayLike] of shape (n_samples,)
         Sample weights.
-    X : ArrayLike of shape (n_samples, n_features)
+    X: ArrayLike of shape (n_samples, n_features)
         Training samples.
-    y : ArrayLike of shape (n_samples,)
+    y: ArrayLike of shape (n_samples,)
         Training labels.
 
     Returns
     -------
-    sample_weight : Optional[NDArray] of shape (n_samples,)
+    sample_weight: Optional[NDArray] of shape (n_samples,)
         Non-null sample weights.
 
-    X : ArrayLike of shape (n_samples, n_features)
+    X: ArrayLike of shape (n_samples, n_features)
         Training samples with non-null weights.
 
-    y : ArrayLike of shape (n_samples,)
+    y: ArrayLike of shape (n_samples,)
         Training labels with non-null weights.
 
     Examples
@@ -64,7 +72,7 @@ def check_null_weight(
         X = _safe_indexing(X, non_null_weight)
         y = _safe_indexing(y, non_null_weight)
         sample_weight = _safe_indexing(sample_weight, non_null_weight)
-    sample_weight = cast(Optional[NDArray], sample_weight)
+        sample_weight = cast(NDArray, sample_weight)
     return sample_weight, X, y
 
 
@@ -72,7 +80,7 @@ def fit_estimator(
     estimator: Union[RegressorMixin, ClassifierMixin],
     X: ArrayLike,
     y: ArrayLike,
-    sample_weight: Optional[ArrayLike] = None,
+    sample_weight: Optional[NDArray] = None,
 ) -> Union[RegressorMixin, ClassifierMixin]:
     """
     Fit an estimator on training data by distinguishing two cases:
@@ -82,13 +90,13 @@ def fit_estimator(
 
     Parameters
     ----------
-    estimator : Union[RegressorMixin, ClassifierMixin]
+    estimator: Union[RegressorMixin, ClassifierMixin]
         Estimator to train.
 
-    X : ArrayLike of shape (n_samples, n_features)
+    X: ArrayLike of shape (n_samples, n_features)
         Input data.
 
-    y : ArrayLike of shape (n_samples,)
+    y: ArrayLike of shape (n_samples,)
         Input labels.
 
     sample_weight : Optional[ArrayLike] of shape (n_samples,)
@@ -121,11 +129,13 @@ def fit_estimator(
 
 
 def check_cv(
-    cv: Optional[Union[int, str, BaseCrossValidator]] = None
+    cv: Optional[Union[int, str, BaseCrossValidator]] = None,
+    test_size: Optional[Union[int, float]] = None,
+    random_state: Optional[Union[int, np.random.RandomState]] = None,
 ) -> Union[str, BaseCrossValidator]:
     """
     Check if cross-validator is
-    ``None``, ``int``, ``"prefit"`` or ``BaseCrossValidator``.
+    ``None``, ``int``, ``"prefit"``, ``"split"``or ``BaseCrossValidator``.
     Return a ``LeaveOneOut`` instance if integer equal to -1.
     Return a ``KFold`` instance if integer superior or equal to 2.
     Return a ``KFold`` instance if ``None``.
@@ -133,8 +143,23 @@ def check_cv(
 
     Parameters
     ----------
-    cv : Optional[Union[int, str, BaseCrossValidator]], optional
+    cv: Optional[Union[int, str, BaseCrossValidator]], optional
         Cross-validator to check, by default ``None``.
+
+    test_size: Optional[Union[int, float]]
+        If float, should be between 0.0 and 1.0 and represent the proportion
+        of the dataset to include in the test split. If int, represents the
+        absolute number of test samples. If None, it will be set to 0.1.
+
+        If cv is not ``"split"``, ``test_size`` is ignored.
+
+        By default ``None``.
+
+    random_state: Optional[Union[int, np.random.RandomState]], optional
+        Pseudo random number generator state used for random uniform sampling
+        for evaluation quantiles and prediction sets.
+        Pass an int for reproducible output across multiple function calls.
+        By default ```None``.
 
     Returns
     -------
@@ -146,20 +171,41 @@ def check_cv(
     ValueError
         If the cross-validator is not valid.
     """
+    if random_state is None:
+        random_seeds = cast(list, np.random.get_state())[1]
+        random_state = np.random.choice(random_seeds)
     if cv is None:
-        return KFold(n_splits=5)
-    if isinstance(cv, int):
+        return KFold(
+            n_splits=5, shuffle=True, random_state=random_state
+        )
+    elif isinstance(cv, int):
         if cv == -1:
             return LeaveOneOut()
-        if cv >= 2:
-            return KFold(n_splits=cv)
-    if isinstance(cv, BaseCrossValidator) or (cv == "prefit"):
+        elif cv >= 2:
+            return KFold(
+                n_splits=cv, shuffle=True, random_state=random_state
+            )
+        else:
+            raise ValueError(
+                "Invalid cv argument. "
+                "Allowed integer values are -1 or int >= 2."
+            )
+    elif isinstance(cv, BaseCrossValidator):
         return cv
-    raise ValueError(
-        "Invalid cv argument. "
-        "Allowed values are None, -1, int >= 2, 'prefit', "
-        "or a BaseCrossValidator object (Kfold, LeaveOneOut)."
-    )
+    elif isinstance(cv, BaseShuffleSplit):
+        return cv
+    elif cv == "prefit":
+        return cv
+    elif cv == "split":
+        return ShuffleSplit(
+            n_splits=1, test_size=test_size, random_state=random_state
+        )
+    else:
+        raise ValueError(
+            "Invalid cv argument. "
+            "Allowed values are None, -1, int >= 2, 'prefit', 'split', "
+            "or a BaseCrossValidator object (Kfold, LeaveOneOut)."
+        )
 
 
 def check_alpha(
@@ -170,7 +216,7 @@ def check_alpha(
 
     Parameters
     ----------
-    alpha : Union[float, Iterable[float]]
+    alpha: Union[float, Iterable[float]]
         Can be a float, a list of floats, or a ArrayLike of floats.
         Between 0 and 1, represent the uncertainty of the confidence interval.
         Lower alpha produce larger (more conservative) prediction intervals.
@@ -205,7 +251,7 @@ def check_alpha(
         )
     if len(alpha_np.shape) != 1:
         raise ValueError(
-            "Invalid alpha. "
+            "Invalid alpha."
             "Please provide a one-dimensional list of values."
         )
     if alpha_np.dtype.type not in [np.float64, np.float32]:
@@ -231,14 +277,14 @@ def check_n_features_in(
 
     Parameters
     ----------
-    cv : Optional[Union[float, str]]
+    cv: Optional[Union[float, str]]
         The cross-validation strategy for computing scores,
         by default ``None``.
 
-    X : ArrayLike of shape (n_samples, n_features)
+    X: ArrayLike of shape (n_samples, n_features)
         Data passed into the ``fit`` method.
 
-    estimator : RegressorMixin
+    estimator: RegressorMixin
         Backend estimator of MAPIE.
 
     Returns
@@ -271,14 +317,15 @@ def check_n_features_in(
     if cv == "prefit" and hasattr(estimator, "n_features_in_"):
         if cast(Any, estimator).n_features_in_ != n_features_in:
             raise ValueError(
-                "Invalid mismatch between "
+                "Invalid mismatch between ",
                 "X.shape and estimator.n_features_in_."
             )
     return n_features_in
 
 
 def check_alpha_and_n_samples(
-    alphas: Union[Iterable[float], float], n: int
+    alphas: Union[Iterable[float], float],
+    n: int,
 ) -> None:
     """
     Check if the quantile can be computed based
@@ -286,10 +333,10 @@ def check_alpha_and_n_samples(
 
     Parameters
     ----------
-    alphas : Iterable[float]
+    alphas: Iterable[float]
         Iterable of floats.
 
-    n : int
+    n: int
         number of samples.
 
     Raises
@@ -380,7 +427,7 @@ def check_nan_in_aposteriori_prediction(X: ArrayLike) -> None:
 
     Parameters
     ----------
-    X : Array of shape (size of training set, number of estimators) whose rows
+    X: Array of shape (size of training set, number of estimators) whose rows
     are the predictions by each estimator of each training sample.
 
     Raises
@@ -414,26 +461,25 @@ def check_lower_upper_bounds(
     y_preds: NDArray, y_pred_low: NDArray, y_pred_up: NDArray
 ) -> None:
     """
-    Check if the lower or upper bounds are inconsistent.
-    If checking for MapieQuantileRegressor, then also checking
-    initial quantile values.
+    Check if the lower or upper bounds are consistent.
+    If check for MapieQuantileRegressor's outputs, then also check
+    initial quantile predictions.
 
     Parameters
     ----------
-    y_pred : NDArray of shape (n_samples, 3) or (n_samples,)
+    y_preds: NDArray of shape (n_samples, 3) or (n_samples,)
         All the predictions at quantile:
         alpha/2, (1 - alpha/2), 0.5 or only the predictions
-    y_pred_low : NDArray of shape (n_samples,)
-        Final lower bound prediction with additional quantile
-        value added
-    y_pred_up : NDArray of shape (n_samples,)
-        Final upper bound prediction with additional quantile
-        value added
+    y_pred_low: NDArray of shape (n_samples,)
+        Final lower bound prediction
+    y_pred_up: NDArray of shape (n_samples,)
+        Final upper bound prediction
 
     Raises
     ------
     Warning
-        If the aggregated predictions of any training sample would be nan.
+        If y_preds, y_pred_low and y_pred_up are ill sorted
+        at anay rank.
 
     Examples
     --------
@@ -441,7 +487,7 @@ def check_lower_upper_bounds(
     >>> warnings.filterwarnings("error")
     >>> import numpy as np
     >>> from mapie.utils import check_lower_upper_bounds
-    >>> y_preds = np.array([[4, 2, 3], [3, 4, 5], [2, 3, 4]])
+    >>> y_preds = np.array([[4, 3, 2], [4, 4, 4], [2, 3, 4]])
     >>> y_pred_low = np.array([4, 3, 2])
     >>> y_pred_up = np.array([4, 4, 4])
     >>> try:
@@ -449,38 +495,49 @@ def check_lower_upper_bounds(
     ... except Exception as exception:
     ...     print(exception)
     ...
-    WARNING: The initial prediction values from the quantile method
-    present issues as the upper quantile values might be higher than the
-    lower quantile values.
+    WARNING: The predictions of the quantile regression have issues.
+    The upper quantile predictions are lower
+    than the lower quantile predictions
+    at some points.
     """
     if y_preds.ndim == 1:
         init_pred = y_preds
     else:
-        init_pred, init_lower_bound, init_upper_bound = y_preds
-    if y_preds.ndim != 1 and np.any(
-        np.logical_or(
-            init_lower_bound >= init_upper_bound,
-            init_pred <= init_lower_bound,
-            init_pred >= init_upper_bound,
+        init_lower_bound, init_upper_bound, init_pred = y_preds
+
+        any_init_inversion = np.any(
+            np.logical_or(
+                np.logical_or(
+                    init_lower_bound > init_upper_bound,
+                    init_pred < init_lower_bound,
+                ),
+                init_pred > init_upper_bound,
+            )
         )
-    ):
+
+    if (y_preds.ndim != 1) and any_init_inversion:
         warnings.warn(
-            "WARNING: The initial prediction values from the "
-            + "quantile method\npresent issues as the upper "
-            "quantile values might be higher than the\nlower "
-            + "quantile values."
+            "WARNING: The predictions of the quantile regression "
+            + "have issues.\nThe upper quantile predictions are lower\n"
+            + "than the lower quantile predictions\n"
+            + "at some points."
         )
-    if np.any(
+
+    any_final_inversion = np.any(
         np.logical_or(
-            y_pred_low >= y_pred_up,
-            init_pred <= y_pred_low,
-            init_pred >= y_pred_up,
+            np.logical_or(
+                y_pred_low > y_pred_up,
+                init_pred < y_pred_low,
+            ),
+            init_pred > y_pred_up,
         )
-    ):
+    )
+
+    if any_final_inversion:
         warnings.warn(
-            "WARNING: Following the additional value added to have conformal "
-            "predictions, the upper and lower bound present issues as one "
-            "might be higher or lower than the other."
+            "WARNING: The predictions have issues.\n"
+            + "The upper predictions are lower than"
+            + "the lower predictions at some points."
         )
 
 
@@ -489,12 +546,10 @@ def check_conformity_score(
 ) -> ConformityScore:
     """
     Check parameter ``conformity_score``.
-
     Raises
     ------
     ValueError
         If parameter is not valid.
-
     Examples
     --------
     >>> from mapie.utils import check_conformity_score
@@ -527,10 +582,10 @@ def check_defined_variables_predict_cqr(
 
     Parameters
     ----------
-    ensemble : bool
+    ensemble: bool
         Ensemble has not been defined in predict and therefore should
         will not have any effects in this method.
-    alpha : Optional[Union[float, Iterable[float]]]
+    alpha: Optional[Union[float, Iterable[float]]]
         For ``MapieQuantileRegresor`` the alpha has to be defined
         directly in initial arguments of the class.
 
@@ -574,7 +629,7 @@ def check_estimator_fit_predict(
 
     Parameters
     ----------
-    estimator : Union[RegressorMixin, ClassifierMixin]
+    estimator: Union[RegressorMixin, ClassifierMixin]
         Estimator to train.
 
     Raises
@@ -595,9 +650,9 @@ def check_alpha_and_last_axis(vector: NDArray, alpha_np: NDArray):
 
     Parameters
     ----------
-    vector : NDArray of shape (n_samples, 1, n_alphas)
+    vector: NDArray of shape (n_samples, 1, n_alphas)
         Vector on which compute the quantile.
-    alpha_np : NDArray of shape (n_alphas, )
+    alpha_np: NDArray of shape (n_alphas, )
         Confidence levels.
 
 
@@ -621,11 +676,11 @@ def compute_quantiles(vector: NDArray, alpha: NDArray) -> NDArray:
 
     Parameters
     ----------
-    vector : NDArray of shape Union[(n_samples, 1), (n_samples, 1, n_alphas)]
+    vector: NDArray of shape Union[(n_samples, 1), (n_samples, 1, n_alphas)]
         Vector on which compute the quantile. If the vector has 3 dimensions,
         then each 1-alpha quantile will be computed on its corresping matrix
         selected on the last axis of the matrix.
-    alpha : NDArray for shape (n_alphas, )
+    alpha: NDArray for shape (n_alphas, )
         Risk levels.
 
     Returns
@@ -635,22 +690,583 @@ def compute_quantiles(vector: NDArray, alpha: NDArray) -> NDArray:
     """
     n = len(vector)
     if len(vector.shape) <= 2:
-        quantiles_ = np.stack([
-                    np_quantile(
-                        vector,
-                        ((n + 1) * (1 - _alpha)) / n,
-                        method="higher",
-                    ) for _alpha in alpha
-        ])
+        quantiles_ = np.stack(
+            [
+                np_quantile(
+                    vector,
+                    ((n + 1) * (1 - _alpha)) / n,
+                    method="higher",
+                )
+                for _alpha in alpha
+            ]
+        )
 
     else:
         check_alpha_and_last_axis(vector, alpha)
         quantiles_ = np.stack(
-                [
-                    compute_quantiles(
-                        vector[:, :, i],
-                        np.array([alpha_])
-                    ) for i, alpha_ in enumerate(alpha)
-                ]
-            )[:, 0]
+            [
+                compute_quantiles(vector[:, :, i], np.array([alpha_]))
+                for i, alpha_ in enumerate(alpha)
+            ]
+        )[:, 0]
     return quantiles_
+
+
+def get_calib_set(
+    X: ArrayLike,
+    y: ArrayLike,
+    sample_weight: Optional[NDArray] = None,
+    calib_size: Optional[float] = 0.3,
+    random_state: Optional[Union[int, np.random.RandomState]] = None,
+    shuffle: Optional[bool] = True,
+    stratify: Optional[ArrayLike] = None,
+) -> Tuple[
+    ArrayLike, ArrayLike, ArrayLike, ArrayLike,
+    Optional[NDArray], Optional[NDArray]
+]:
+    """
+    Split the dataset into training and calibration sets.
+
+    Parameters
+    ----------
+    Same definition of parameters as for the ``fit`` method.
+
+    Returns
+    -------
+    Tuple[
+        ArrayLike, ArrayLike, ArrayLike, ArrayLike,
+        Optional[NDArray], Optional[NDArray]
+    ]
+    - [0]: ArrayLike of shape (n_samples_*(1-calib_size), n_features)
+        X_train
+    - [1]: ArrayLike of shape (n_samples_*(1-calib_size),)
+        y_train
+    - [2]: ArrayLike of shape (n_samples_*calib_size, n_features)
+        X_calib
+    - [3]: ArrayLike of shape (n_samples_*calib_size,)
+        y_calib
+    - [4]: Optional[NDArray] of shape (n_samples_*(1-calib_size),)
+        sample_weight_train
+    - [5]: Optional[NDArray] of shape (n_samples_*calib_size,)
+        sample_weight_calib
+    """
+    if sample_weight is None:
+        (
+            X_train, X_calib, y_train, y_calib
+        ) = train_test_split(
+                X,
+                y,
+                test_size=calib_size,
+                random_state=random_state,
+                shuffle=shuffle,
+                stratify=stratify
+        )
+        sample_weight_train = sample_weight
+        sample_weight_calib = None
+    else:
+        (
+                X_train,
+                X_calib,
+                y_train,
+                y_calib,
+                sample_weight_train,
+                sample_weight_calib,
+        ) = train_test_split(
+                X,
+                y,
+                sample_weight,
+                test_size=calib_size,
+                random_state=random_state,
+                shuffle=shuffle,
+                stratify=stratify
+        )
+    X_train, X_calib = cast(ArrayLike, X_train), cast(ArrayLike, X_calib)
+    y_train, y_calib = cast(ArrayLike, y_train), cast(ArrayLike, y_calib)
+    return (
+        X_train, y_train, X_calib, y_calib,
+        sample_weight_train, sample_weight_calib
+    )
+
+
+def check_estimator_classification(
+    X: ArrayLike,
+    y: ArrayLike,
+    cv: Union[str, BaseCrossValidator],
+    estimator: Optional[ClassifierMixin],
+) -> ClassifierMixin:
+    """
+    Check if estimator is ``None``,
+    and returns a ``LogisticRegression`` instance if necessary.
+    If the ``cv`` attribute is ``"prefit"``,
+    check if estimator is indeed already fitted.
+    Parameters
+    ----------
+    X: ArrayLike of shape (n_samples, n_features)
+        Training data.
+    y: ArrayLike of shape (n_samples,)
+        Training labels.
+    cv: Union[str, BaseCrossValidator]
+        Cross validation parameter.
+    estimator: Optional[ClassifierMixin]
+        Estimator to check.
+    Returns
+    -------
+    ClassifierMixin
+        The estimator itself or a default ``LogisticRegression`` instance.
+    Raises
+    ------
+    ValueError
+        If the estimator is not ``None``
+        and has no fit, predict, nor predict_proba methods.
+    NotFittedError
+        If the estimator is not fitted and ``cv`` attribute is "prefit".
+    """
+    if estimator is None:
+        return LogisticRegression(multi_class="multinomial").fit(X, y)
+
+    if isinstance(estimator, Pipeline):
+        est = estimator[-1]
+    else:
+        est = estimator
+    if (
+        not hasattr(est, "fit")
+        and not hasattr(est, "predict")
+        and not hasattr(est, "predict_proba")
+    ):
+        raise ValueError(
+            "Invalid estimator. "
+            "Please provide a classifier with fit,"
+            "predict, and predict_proba methods."
+        )
+    if cv == "prefit":
+        check_is_fitted(est)
+        if not hasattr(est, "classes_"):
+            raise AttributeError(
+                "Invalid classifier. "
+                "Fitted classifier does not contain "
+                "'classes_' attribute."
+            )
+    return estimator
+
+
+def get_binning_groups(
+    y_score: NDArray,
+    num_bins: int,
+    strategy: str,
+) -> NDArray:
+    """
+    Parameters
+    ----------
+    y_score : NDArray of shape (n_samples,)
+        The scores given from the calibrator.
+    num_bins : int
+        Number of bins to make the split in the y_score.
+    strategy : string
+        The splitting strategy to split y_scores into different bins.
+    Returns
+    -------
+    NDArray of shape (num_bins,)
+        An array of all the splitting points for a new bin.
+    """
+    bins = None
+    if strategy == "quantile":
+        quantiles = np.linspace(0, 1, num_bins)
+        bins = np.percentile(y_score, quantiles * 100)
+    elif strategy == "uniform":
+        bins = np.linspace(0.0, 1.0, num_bins)
+    else:
+        bin_groups = np.array_split(y_score, num_bins)
+        bins = np.sort(np.array(
+                [
+                    bin_group.max() for bin_group in bin_groups[:-1]
+                ]
+                + [np.inf]
+            )
+        )
+    return bins
+
+
+def calc_bins(
+    y_true: NDArray,
+    y_score: NDArray,
+    num_bins: int,
+    strategy: str,
+) -> Union[NDArray, NDArray, NDArray, NDArray]:
+    """
+    For each bins, calculate the accuracy, average confidence and size.
+    Parameters
+    ----------
+    y_true: NDArray of shape (n_samples,)
+        The "true" values, target for the calibrator.
+    y_score: NDArray of shape (n_samples,)
+        The scores given from the calibrator.
+    num_bins: int
+        Number of bins to make the split in the y_score.
+    strategy: str
+        The way of splitting the predictions into different bins.
+    Returns
+    -------
+    Union[NDArray, NDArray, NDArray, NDArray]
+    - [0]: NDArray of shape (num_bins,)
+    An array of all the splitting points for a new bin.
+    - [1]: NDArray of shape (num_bins,)
+    An array of the average accuracy in each of the bins.
+    - [2]: NDArray of shape (num_bins,)
+    An array of the average confidence in each of the bins.
+    - [3]: NDArray of shape (num_bins,)
+    An array of the number of observations in each of the bins.
+    """
+    bins = get_binning_groups(y_score, num_bins, strategy)
+    binned = np.digitize(y_score, bins, right=True)
+    bin_accs = np.zeros(num_bins)
+    bin_confs = np.zeros(num_bins)
+    bin_sizes = np.zeros(num_bins)
+
+    for bin in range(num_bins):
+        bin_sizes[bin] = len(y_score[binned == bin])
+        if bin_sizes[bin] > 0:
+            bin_accs[bin] = np.divide(
+                np.sum(y_true[binned == bin]),
+                bin_sizes[bin],
+            )
+            bin_confs[bin] = np.divide(
+                np.sum(y_score[binned == bin]),
+                bin_sizes[bin],
+            )
+    return bins, bin_accs, bin_confs, bin_sizes  # type: ignore
+
+
+def check_split_strategy(
+    strategy: Optional[str]
+) -> str:
+    """
+    Checks that the split strategy provided is valid
+    and defults None split strategy to "uniform".
+    Parameters
+    ----------
+    strategy: Optional[str]
+        Can be a string or None.
+
+    Returns
+    -------
+    str
+        The spitting strategy that will be adopted, needs to be a string.
+
+    Raises
+    ------
+    ValueError
+        If the strategy is not part of the valid strategies.
+    """
+    if strategy is None:
+        strategy = "uniform"
+    if strategy not in SPLIT_STRATEGIES:
+        raise ValueError(
+            "Please provide a valid splitting strategy."
+        )
+    return strategy
+
+
+def check_number_bins(
+    num_bins: int
+) -> int:
+    """
+    Checks that the bin specified is a number.
+
+    Parameters
+    ----------
+    num_bins: int
+        An integer that determines the number of bins to create
+        on an array.
+
+    Raises
+    ------
+    ValueError
+        When num_bins is not an integer is raises an error.
+
+    ValueError
+        When num_bins is a negative number is raises an error.
+    """
+    if isinstance(num_bins, int) is False:
+        raise ValueError(
+            "Please provide a bin number as an integer."
+        )
+    elif num_bins < 1:
+        raise ValueError(
+            """
+            Please provide a bin number greater than
+            or equal to  1.
+            """
+        )
+    else:
+        return num_bins
+
+
+def check_binary_zero_one(
+    y_true: ArrayLike
+) -> NDArray:
+    """
+    Checks if the array is binary and changes a non binary array
+    to a zero, one array.
+
+    Parameters
+    ----------
+    y_true: ArrayLike of shape (n_samples,)
+        Could be any array, but in this case is the true values
+        as binary input.
+
+    Returns
+    -------
+    NDArray of shape (n_samples,)
+        An array of zero, one values.
+
+    Raises
+    ------
+    ValueError
+        If the input array is not binary, then an error is raised.
+    """
+    y_true = cast(NDArray, column_or_1d(y_true))
+    if type_of_target(y_true) == "binary":
+        if ((np.unique(y_true) != np.array([0, 1])).any() and
+                len(np.unique(y_true)) == 2):
+            idx_min = np.where(y_true == np.min(y_true))[0]
+            y_true[idx_min] = 0
+            idx_max = np.where(y_true == np.max(y_true))[0]
+            y_true[idx_max] = 1
+            return y_true
+        else:
+            return y_true
+    else:
+        raise ValueError(
+            "Please provide y_true as a binary array."
+        )
+
+
+def fix_number_of_classes(
+    n_classes_: int,
+    n_classes_training: NDArray,
+    y_proba: NDArray
+) -> NDArray:
+    """
+    Fix shape of y_proba of validation set if number of classes
+    of the training set used for cross-validation is different than
+    number of classes of the original dataset y.
+
+    Parameters
+    ----------
+    n_classes_training: NDArray
+        Classes of the training set.
+    y_proba: NDArray
+        Probabilities of the validation set.
+
+    Returns
+    -------
+    NDArray
+        Probabilities with the right number of classes.
+    """
+    y_pred_full = np.zeros(
+        shape=(len(y_proba), n_classes_)
+    )
+    y_index = np.tile(n_classes_training, (len(y_proba), 1))
+    np.put_along_axis(
+        y_pred_full,
+        y_index,
+        y_proba,
+        axis=1
+    )
+    return y_pred_full
+
+
+def check_array_shape_classification(
+    y_true: NDArray,
+    y_pred_set: NDArray
+) -> NDArray:
+    """
+    Fix shape of y_pred_set (to 3d array of shape (n_obs, n_class, n_alpha)).
+
+    Parameters
+    ----------
+    y_true: ArrayLike
+        True labels.
+    y_pred_set: ArrayLike
+        Prediction sets given by booleans of labels.
+
+    Returns
+    -------
+    NDArray
+        Fixed y_pred_set.
+
+    Raises
+    ------
+    ValueError
+        If y_true and y_pred_set doesn't have the same number of samples
+        and if y_pred_sets is an array of shape greater than 3 or lower than 2.
+    """
+    if y_true.shape[0] != y_pred_set.shape[0]:
+        raise ValueError(
+            f"shape mismatch between y_true {y_true.shape} \
+                and y_pred_set {y_pred_set.shape}"
+        )
+    if len(y_pred_set.shape) != 3:
+        if len(y_pred_set.shape) != 2:
+            raise ValueError(
+                "y_pred_set should be a 3D array of shape \
+                (n_obs, n_classes, n_alpha)"
+            )
+        else:
+            y_pred_set = np.expand_dims(y_pred_set, axis=2)
+    return y_pred_set
+
+
+def check_array_shape_regression(
+    y_true: NDArray,
+    y_intervals: NDArray
+) -> NDArray:
+    """
+    Fix shape of y_intervals (to 3d array of shape (n_obs, 2, n_alpha)).
+
+    Parameters
+    ----------
+    y_true: NDArray
+        True labels.
+    y_intervals: NDArray
+        Lower and upper bound of prediction intervals
+        with different alpha risks.
+
+    Returns
+    -------
+    NDArray
+        Fixed y_intervals.
+
+    Raises
+    ------
+    ValueError
+        If y_true and y_intervals doesn't have the same number of samples
+        and if y_intervals is an array of shape greater than 3 or lower than 2.
+    """
+    if len(y_intervals.shape) != 3:
+        if len(y_intervals.shape) != 2:
+            raise ValueError(
+                "y_intervals should be a 3D array of shape (n_obs, 2, n_alpha)"
+            )
+        else:
+            y_intervals = np.expand_dims(y_intervals, axis=2)
+    if y_true.shape[0] != y_intervals.shape[0]:
+        raise ValueError(
+            f"shape mismatch between y_true {y_true.shape} \
+                and y_intervals {y_intervals.shape}"
+        )
+    return y_intervals
+
+
+def check_nb_intervals_sizes(widths: NDArray, num_bins: int) -> None:
+    """
+    Checks that the number of bins is less than the number of different
+    interval widths.
+
+    Parameters
+    ----------
+    widths: NDArray (n_samples, n_alpha)
+        Widths of the prediction intervals.
+    num_bins: int
+        Number of bins.
+
+    Raises
+    ------
+    ValueError
+        If the number of bins is greater than the number of different widths.
+    """
+    for alpha in range(widths.shape[1]):
+        nb_widths = len(np.unique(widths[:, alpha].round(5)))
+        if nb_widths <= num_bins:
+            raise ValueError(
+                "The number of bins should be lower or equal to the number of \
+                different interval widths."
+            )
+
+
+def check_nb_sets_sizes(sizes: NDArray, num_bins: int) -> None:
+    """
+    Checks that the number of bins is less than the number of different
+    set sizes.
+
+    Parameters
+    ----------
+    sizes: NDArrat of shape (n_samples, n_alpha)
+        Sizes of the prediction sets.
+    num_bins: int
+        Number of bins.
+
+    Raises
+    ------
+    ValueError
+        If the number of bins is greater than the number of different sizes.
+    """
+    for alpha in range(sizes.shape[1]):
+        nb_sizes = len(np.unique(sizes[:, alpha]))
+        if nb_sizes <= num_bins:
+            raise ValueError(
+                "The number of bins should be less than the number of \
+                different set sizes."
+            )
+
+
+def check_array_nan(array: NDArray) -> None:
+    """
+    Checks if the array have only NaN values. If it has we throw an error.
+
+    Parameters
+    ----------
+    array: NDArray
+        an array with non-numerical or non-categorical values
+
+    Raises
+    ------
+    ValueError
+        If all elements of the array are NaNs
+    """
+    if np.isnan(array).all() and len(np.unique(array)) > 0:
+        raise ValueError(
+            "Array contains only NaN values."
+        )
+
+
+def check_array_inf(array: NDArray) -> None:
+    """
+    Checks if the array have inf.
+    If a value is infinite, we throw an error.
+
+    Parameters
+    ----------
+    array: NDArray
+        an array with non-numerical or non-categorical values
+
+    Raises
+    ------
+    ValueError
+        If any elements of the array is +inf or -inf.
+    """
+    if np.isinf(array).any():
+        raise ValueError(
+            "Array contains infinite values."
+        )
+
+
+def check_arrays_length(*arrays: NDArray) -> None:
+    """
+    Checks if the length of all arrays given in this function are the same
+
+    Parameters
+    ----------
+    *arrays: NDArray
+        Arrays expected to have the same length
+
+    Raises
+    ------
+    ValueError
+        If the length of the arrays are different
+    """
+    res = [array.shape[0] for array in arrays]
+    if len(np.unique(res)) > 1:
+        raise ValueError(
+                "There are arrays with different length"
+            )
