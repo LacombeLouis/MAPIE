@@ -1,24 +1,26 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import numpy as np
 import pytest
 from numpy.random import RandomState
 from sklearn.datasets import make_regression
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import BaseCrossValidator
+from sklearn.model_selection import (BaseCrossValidator, KFold, LeaveOneOut,
+                                     ShuffleSplit)
 from sklearn.utils.validation import check_is_fitted
 
 from mapie._typing import ArrayLike, NDArray
 from mapie.regression import MapieQuantileRegressor
 from mapie.utils import (check_alpha, check_alpha_and_n_samples,
-                         check_array_nan, check_array_inf, check_arrays_length,
-                         check_binary_zero_one, check_cv,
+                         check_array_inf, check_array_nan, check_arrays_length,
+                         check_binary_zero_one, check_cv, check_gamma,
                          check_lower_upper_bounds, check_n_features_in,
-                         check_n_jobs, check_null_weight, check_number_bins,
-                         check_split_strategy, check_verbose,
-                         compute_quantiles, fit_estimator, get_binning_groups)
+                         check_n_jobs, check_no_agg_cv, check_null_weight,
+                         check_number_bins, check_split_strategy,
+                         check_verbose, compute_quantiles, fit_estimator,
+                         get_binning_groups)
 
 X_toy = np.array([0, 1, 2, 3, 4, 5]).reshape(-1, 1)
 y_toy = np.array([5, 7, 9, 11, 13, 15])
@@ -227,11 +229,9 @@ def test_valid_verbose(verbose: Any) -> None:
 
 def test_initial_low_high_pred() -> None:
     """Test lower/upper predictions of the quantiles regression crossing"""
-    y_preds = np.array([[4, 3, 2], [4, 4, 4], [2, 3, 4]])
-    y_pred_low = np.array([4, 3, 2])
-    y_pred_up = np.array([4, 4, 4])
-    with pytest.warns(UserWarning, match=r"WARNING: The prediction.*"):
-        check_lower_upper_bounds(y_preds, y_pred_low, y_pred_up)
+    y_preds = np.array([[4, 5, 2], [4, 4, 4], [2, 3, 4]])
+    with pytest.warns(UserWarning, match=r"WARNING: The predictions are*"):
+        check_lower_upper_bounds(y_preds[0], y_preds[1], y_preds[2])
 
 
 def test_final_low_high_pred() -> None:
@@ -239,19 +239,10 @@ def test_final_low_high_pred() -> None:
     y_preds = np.array(
         [[4, 3, 2], [3, 3, 3], [2, 3, 4]]
     )
-    y_pred_low = np.array([4, 3, 2])
+    y_pred_low = np.array([4, 7, 2])
     y_pred_up = np.array([3, 3, 3])
-    with pytest.warns(UserWarning, match=r"WARNING: The predictions of .*"):
-        check_lower_upper_bounds(y_preds, y_pred_low, y_pred_up)
-
-
-def test_final1D_low_high_pred() -> None:
-    """Test lower/upper predictions crossing when y_preds is 1D"""
-    y_preds = np.array([4, 3, 4])
-    y_pred_low = np.array([7, 3, 2])
-    y_pred_up = np.array([3, 4, 4])
-    with pytest.warns(UserWarning, match=r"WARNING: The predictions .*"):
-        check_lower_upper_bounds(y_preds, y_pred_low, y_pred_up)
+    with pytest.warns(UserWarning, match=r"WARNING: The predictions are*"):
+        check_lower_upper_bounds(y_pred_low, y_pred_up, y_preds[2])
 
 
 def test_ensemble_in_predict() -> None:
@@ -446,6 +437,22 @@ def test_change_values_zero_one() -> None:
     assert (np.unique(array_) == np.array([0, 1])).all()
 
 
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.9])
+def test_valid_gamma(gamma: float) -> None:
+    """Test a valid gamma parameter."""
+    check_gamma(gamma)
+
+
+@pytest.mark.parametrize("gamma", [1.5, -0.1])
+def test_invalid_large_gamma(gamma: float) -> None:
+    """Test a non-valid gamma parameter."""
+    with pytest.raises(
+        ValueError,
+        match="Invalid gamma. Allowed values are between 0 and 1."
+    ):
+        check_gamma(gamma)
+
+
 @pytest.mark.parametrize("cv", [5, "split"])
 def test_check_cv_same_split_with_random_state(cv: BaseCrossValidator) -> None:
     """Test that cv generate same split with fixed random_state."""
@@ -474,3 +481,30 @@ def test_check_cv_same_split_no_random_state(cv: BaseCrossValidator) -> None:
 
     for i in range(cv.get_n_splits()):
         np.testing.assert_allclose(train_indices_1[i], train_indices_2[i])
+
+
+@pytest.mark.parametrize(
+    "cv_result", [
+        (1, True), (2, False),
+        ("split", True), (KFold(5), False),
+        (ShuffleSplit(1), True),
+        (ShuffleSplit(2), False),
+        (LeaveOneOut(), False),
+    ]
+)
+def test_check_no_agg_cv(cv_result: Tuple) -> None:
+    """Test that if `check_no_agg_cv` function returns the expected result."""
+    array = ["prefit", "split"]
+    cv, result = cv_result
+    np.testing.assert_almost_equal(check_no_agg_cv(X_toy, cv, array), result)
+
+
+@pytest.mark.parametrize("cv", [object()])
+def test_check_no_agg_cv_value_error(cv: Any) -> None:
+    """Test that if `check_no_agg_cv` function raises value error."""
+    array = ["prefit", "split"]
+    with pytest.raises(
+        ValueError,
+        match=r"Allowed values must have the `get_n_splits` method"
+    ):
+        check_no_agg_cv(X_toy, cv, array)

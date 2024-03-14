@@ -1,18 +1,16 @@
 import warnings
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from sklearn.base import RegressorMixin, clone
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.utils.validation import (check_is_fitted,
-                                      check_random_state,
+from sklearn.utils.validation import (check_is_fitted, check_random_state,
                                       indexable)
 
 from mapie._machine_precision import EPSILON
 from mapie._typing import ArrayLike, NDArray
-
 from mapie.conformity_scores import ConformityScore
 
 
@@ -29,8 +27,9 @@ class AbsoluteConformityScore(ConformityScore):
 
     def __init__(
         self,
+        sym: bool = True,
     ) -> None:
-        super().__init__(sym=True, consistency_check=True)
+        super().__init__(sym=sym, consistency_check=True)
 
     def get_signed_conformity_scores(
         self,
@@ -77,8 +76,9 @@ class GammaConformityScore(ConformityScore):
 
     def __init__(
         self,
+        sym: bool = False,
     ) -> None:
-        super().__init__(sym=False, consistency_check=False, eps=EPSILON)
+        super().__init__(sym=sym, consistency_check=False, eps=EPSILON)
 
     def _check_observed_data(
         self,

@@ -7,7 +7,7 @@ Theoretical Description
 =======================
 
 
-Three methods for multi-class uncertainty-quantification have been implemented in MAPIE so far :
+Three methods for multi-class uncertainty quantification have been implemented in MAPIE so far :
 LAC (that stands for Least Ambiguous set-valued Classifier) [1], Adaptive Prediction Sets [2, 3] and Top-K [3].
 The difference between these methods is the way the conformity scores are computed. 
 The figure below illustrates the three methods implemented in MAPIE:
@@ -35,7 +35,7 @@ Note that the guarantee is possible only on the marginal coverage, and not on th
 1. LAC
 ------
 
-In the LAC method, the conformity score is defined as as one minus the score of the true label. For each point :math:`i` of the calibration set : 
+In the LAC method, the conformity score is defined as one minus the score of the true label. For each point :math:`i` of the calibration set : 
 
 .. math:: 
     s_i(X_i, Y_i) = 1 - \hat{\mu}(X_i)_{Y_i}
@@ -53,7 +53,7 @@ Finally, we construct a prediction set by including all labels with a score high
     \hat{C}(X_{test}) = \{y : \hat{\mu}(X_{test})_y \geq 1 - \hat{q}\}
 
 
-This simple approach allows us to construct prediction sets which have a theoretical guarantee on the marginal coverage.
+This simple approach allows us to construct prediction sets that have a theoretical guarantee on the marginal coverage.
 However, although this method generally results in small prediction sets, it tends to produce empty ones when the model is uncertain,
 for example at the border between two classes.
 
@@ -133,16 +133,16 @@ For the construction of the prediction set for a new test point, the following p
 .. math::
    \hat{C}(X_{test}) = \{\pi_1, ..., \pi_k\} \quad \text{where} \quad k = \text{inf}\{k : \sum^k_{j=1} \hat{\mu}(X_{test})_{\pi_j} + \lambda(k-k_{reg})^+ \geq \hat{q}\}
 
-Intuitively, the goal of the method is to penalize the prediction sets whose size are greater than the optimal prediction set size. The level of this 
+Intuitively, the goal of the method is to penalize the prediction sets whose sizes are greater than the optimal prediction set size. The level of this 
 regularization is controlled by the parameter :math:`\lambda`.
 
-Despite that RAPS method has relatively small set size, its coverage tends to be higher than the one required (especially for high values of
-:math:`\alpha`, which means low level of confidence). Hence, to achieve exact coverage, one can implement a randomization concerning the inclusion
+Despite the RAPS method having a relatively small set size, its coverage tends to be higher than the one required (especially for high values of
+:math:`\alpha`, which means a low level of confidence). Hence, to achieve exact coverage, one can implement a randomization concerning the inclusion
 of the last label in the prediction set. This randomization is done as follows:
 
 - First : define the :math:`V` parameter:
 .. math::
-        V_i = (s_i(X_i, Y_i) - \hat{q}_{1-\alpha}) / \left(\hat{\mu}(X_i)_{\pi_k} + \lambda \mathbb{1} (k > k_{reg})\right)
+   V_i = (s_i(X_i, Y_i) - \hat{q}_{1-\alpha}) / \left(\hat{\mu}(X_i)_{\pi_k} + \lambda \mathbb{1} (k > k_{reg})\right)
 - Compare each :math:`V_i` to :math:`U \sim` Unif(0, 1)
 - If :math:`V_i \leq U`, the last included label is removed, else we keep the prediction set as it is.
 

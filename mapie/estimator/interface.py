@@ -1,6 +1,6 @@
 from __future__ import annotations
-from abc import ABCMeta, abstractmethod
 
+from abc import ABCMeta, abstractmethod
 from typing import Optional, Tuple, Union
 
 from sklearn.base import RegressorMixin
@@ -21,6 +21,8 @@ class EnsembleEstimator(RegressorMixin, metaclass=ABCMeta):
         X: ArrayLike,
         y: ArrayLike,
         sample_weight: Optional[ArrayLike] = None,
+        groups: Optional[ArrayLike] = None,
+        **fit_params
     ) -> EnsembleEstimator:
         """
         Fit the base estimator under the ``single_estimator_`` attribute.
@@ -40,6 +42,14 @@ class EnsembleEstimator(RegressorMixin, metaclass=ABCMeta):
         sample_weight: Optional[ArrayLike] of shape (n_samples,)
             Sample weights. If None, then samples are equally weighted.
             By default ``None``.
+
+        groups: Optional[ArrayLike] of shape (n_samples,)
+            Group labels for the samples used while splitting the dataset into
+            train/test set.
+            By default ``None``.
+
+        **fit_params : dict
+            Additional fit parameters.
 
         Returns
         -------

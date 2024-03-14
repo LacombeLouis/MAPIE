@@ -5,8 +5,8 @@ from typing import Any, Iterable, Optional, Tuple, Union, cast
 import numpy as np
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import (BaseCrossValidator, KFold, LeaveOneOut,
-                                     BaseShuffleSplit, ShuffleSplit,
+from sklearn.model_selection import (BaseCrossValidator, BaseShuffleSplit,
+                                     KFold, LeaveOneOut, ShuffleSplit,
                                      train_test_split)
 from sklearn.pipeline import Pipeline
 from sklearn.utils import _safe_indexing
@@ -81,6 +81,7 @@ def fit_estimator(
     X: ArrayLike,
     y: ArrayLike,
     sample_weight: Optional[NDArray] = None,
+    **fit_params,
 ) -> Union[RegressorMixin, ClassifierMixin]:
     """
     Fit an estimator on training data by distinguishing two cases:
@@ -103,6 +104,9 @@ def fit_estimator(
         Sample weights. If None, then samples are equally weighted.
         By default None.
 
+    **fit_params : dict
+            Additional fit parameters.
+
     Returns
     -------
     RegressorMixin
@@ -122,20 +126,21 @@ def fit_estimator(
     fit_parameters = signature(estimator.fit).parameters
     supports_sw = "sample_weight" in fit_parameters
     if supports_sw and sample_weight is not None:
-        estimator.fit(X, y, sample_weight=sample_weight)
+        estimator.fit(X, y, sample_weight=sample_weight, **fit_params)
     else:
-        estimator.fit(X, y)
+        estimator.fit(X, y, **fit_params)
     return estimator
 
 
 def check_cv(
-    cv: Optional[Union[int, str, BaseCrossValidator]] = None,
+    cv: Optional[Union[int, str, BaseCrossValidator, BaseShuffleSplit]] = None,
     test_size: Optional[Union[int, float]] = None,
     random_state: Optional[Union[int, np.random.RandomState]] = None,
-) -> Union[str, BaseCrossValidator]:
+) -> Union[str, BaseCrossValidator, BaseShuffleSplit]:
     """
     Check if cross-validator is
-    ``None``, ``int``, ``"prefit"``, ``"split"``or ``BaseCrossValidator``.
+    ``None``, ``int``, ``"prefit"``, ``"split"``, ``BaseCrossValidator`` or
+    ``BaseShuffleSplit``.
     Return a ``LeaveOneOut`` instance if integer equal to -1.
     Return a ``KFold`` instance if integer superior or equal to 2.
     Return a ``KFold`` instance if ``None``.
@@ -143,7 +148,7 @@ def check_cv(
 
     Parameters
     ----------
-    cv: Optional[Union[int, str, BaseCrossValidator]], optional
+    cv: Optional[Union[int, str, BaseCrossValidator, BaseShuffleSplit]]
         Cross-validator to check, by default ``None``.
 
     test_size: Optional[Union[int, float]]
@@ -163,8 +168,8 @@ def check_cv(
 
     Returns
     -------
-    Optional[Union[float, str]]
-        'prefit' or None.
+    Union[str, BaseCrossValidator, BaseShuffleSplit]
+        The cast `cv` parameter.
 
     Raises
     ------
@@ -205,6 +210,69 @@ def check_cv(
             "Invalid cv argument. "
             "Allowed values are None, -1, int >= 2, 'prefit', 'split', "
             "or a BaseCrossValidator object (Kfold, LeaveOneOut)."
+        )
+
+
+def check_no_agg_cv(
+    X: ArrayLike,
+    cv: Union[int, str, BaseCrossValidator, BaseShuffleSplit],
+    no_agg_cv_array: list,
+    y: Optional[ArrayLike] = None,
+    groups: Optional[ArrayLike] = None
+) -> bool:
+    """
+    Check if cross-validator is ``"prefit"``, ``"split"`` or any split
+    equivalent `BaseCrossValidator` or `BaseShuffleSplit`.
+
+    Parameters
+    ----------
+    X: ArrayLike of shape (n_samples, n_features)
+        Training data.
+
+    cv: Union[int, str, BaseCrossValidator, BaseShuffleSplit]
+        Cross-validator to check.
+
+    no_agg_cv_array: list
+        List of all non-aggregated cv methods.
+
+    y: Optional[ArrayLike] of shape (n_samples,)
+        Input labels.
+
+        By default ``None``.
+
+    groups: Optional[ArrayLike] of shape (n_samples,)
+        Group labels for the samples used while splitting the dataset into
+        train/test set.
+
+        By default ``None``.
+
+    y: Optional[ArrayLike] of shape (n_samples,)
+        Input labels.
+
+        By default ``None``.
+
+    groups: Optional[ArrayLike] of shape (n_samples,)
+        Group labels for the samples used while splitting the dataset into
+        train/test set.
+
+        By default ``None``.
+
+    Returns
+    -------
+    bool
+        True if `cv` is a split equivalent / non-aggregated cv method.
+    """
+    if isinstance(cv, str):
+        return cv in no_agg_cv_array
+    elif isinstance(cv, int):
+        return cv == 1
+    elif hasattr(cv, "get_n_splits"):
+        return cv.get_n_splits(X, y, groups) == 1
+    else:
+        raise ValueError(
+            "Invalid cv argument. "
+            "Allowed values must have the `get_n_splits` method "
+            "with zero or one parameter (X)."
         )
 
 
@@ -258,7 +326,7 @@ def check_alpha(
         raise ValueError(
             "Invalid alpha. Allowed values are Iterable of floats."
         )
-    if np.any(np.logical_or(alpha_np <= 0, alpha_np >= 1)):
+    if np.any(np.logical_or(alpha_np < 0, alpha_np > 1)):
         raise ValueError("Invalid alpha. Allowed values are between 0 and 1.")
     return alpha_np
 
@@ -321,6 +389,27 @@ def check_n_features_in(
                 "X.shape and estimator.n_features_in_."
             )
     return n_features_in
+
+
+def check_gamma(
+    gamma: float
+) -> None:
+    """
+    Check if gamma is between 0 and 1.
+
+    Parameters
+    ----------
+    gamma: float
+
+    Raises
+    ------
+    ValueError
+        If gamma is lower than 0 or higher than 1.
+    """
+    if (gamma < 0) or (gamma > 1):
+        raise ValueError(
+            "Invalid gamma. Allowed values are between 0 and 1."
+        )
 
 
 def check_alpha_and_n_samples(
@@ -458,28 +547,28 @@ def check_nan_in_aposteriori_prediction(X: ArrayLike) -> None:
 
 
 def check_lower_upper_bounds(
-    y_preds: NDArray, y_pred_low: NDArray, y_pred_up: NDArray
+    y_pred_low: NDArray,
+    y_pred_up: NDArray,
+    y_preds: NDArray
 ) -> None:
     """
-    Check if the lower or upper bounds are consistent.
-    If check for MapieQuantileRegressor's outputs, then also check
-    initial quantile predictions.
+    Check if lower or upper bounds and prediction are consistent.
 
     Parameters
     ----------
-    y_preds: NDArray of shape (n_samples, 3) or (n_samples,)
-        All the predictions at quantile:
-        alpha/2, (1 - alpha/2), 0.5 or only the predictions
     y_pred_low: NDArray of shape (n_samples,)
-        Final lower bound prediction
+        Lower bound prediction.
+
     y_pred_up: NDArray of shape (n_samples,)
-        Final upper bound prediction
+        Upper bound prediction.
+
+    y_preds: NDArray of shape (n_samples,)
+        Prediction.
 
     Raises
     ------
     Warning
-        If y_preds, y_pred_low and y_pred_up are ill sorted
-        at anay rank.
+        If any of the predictions are ill-sorted.
 
     Examples
     --------
@@ -488,68 +577,41 @@ def check_lower_upper_bounds(
     >>> import numpy as np
     >>> from mapie.utils import check_lower_upper_bounds
     >>> y_preds = np.array([[4, 3, 2], [4, 4, 4], [2, 3, 4]])
-    >>> y_pred_low = np.array([4, 3, 2])
-    >>> y_pred_up = np.array([4, 4, 4])
     >>> try:
-    ...     check_lower_upper_bounds(y_preds, y_pred_low, y_pred_up)
+    ...     check_lower_upper_bounds(y_preds[0], y_preds[1], y_preds[2])
     ... except Exception as exception:
     ...     print(exception)
     ...
-    WARNING: The predictions of the quantile regression have issues.
-    The upper quantile predictions are lower
-    than the lower quantile predictions
-    at some points.
+    WARNING: The predictions are ill-sorted.
     """
-    if y_preds.ndim == 1:
-        init_pred = y_preds
-    else:
-        init_lower_bound, init_upper_bound, init_pred = y_preds
+    y_pred_low = column_or_1d(y_pred_low)
+    y_pred_up = column_or_1d(y_pred_up)
+    y_preds = column_or_1d(y_preds)
 
-        any_init_inversion = np.any(
-            np.logical_or(
-                np.logical_or(
-                    init_lower_bound > init_upper_bound,
-                    init_pred < init_lower_bound,
-                ),
-                init_pred > init_upper_bound,
-            )
-        )
-
-    if (y_preds.ndim != 1) and any_init_inversion:
-        warnings.warn(
-            "WARNING: The predictions of the quantile regression "
-            + "have issues.\nThe upper quantile predictions are lower\n"
-            + "than the lower quantile predictions\n"
-            + "at some points."
-        )
-
-    any_final_inversion = np.any(
-        np.logical_or(
-            np.logical_or(
-                y_pred_low > y_pred_up,
-                init_pred < y_pred_low,
-            ),
-            init_pred > y_pred_up,
-        )
+    any_inversion = np.any(
+        (y_pred_low > y_pred_up) |
+        (y_preds < y_pred_low) |
+        (y_preds > y_pred_up)
     )
 
-    if any_final_inversion:
+    if any_inversion:
         warnings.warn(
-            "WARNING: The predictions have issues.\n"
-            + "The upper predictions are lower than"
-            + "the lower predictions at some points."
+            "WARNING: The predictions are ill-sorted."
         )
 
 
 def check_conformity_score(
     conformity_score: Optional[ConformityScore],
+    sym: bool = True,
 ) -> ConformityScore:
     """
     Check parameter ``conformity_score``.
+
     Raises
     ------
     ValueError
         If parameter is not valid.
+
     Examples
     --------
     >>> from mapie.utils import check_conformity_score
@@ -562,7 +624,7 @@ def check_conformity_score(
     Must be None or a ConformityScore instance.
     """
     if conformity_score is None:
-        return AbsoluteConformityScore()
+        return AbsoluteConformityScore(sym=sym)
     elif isinstance(conformity_score, ConformityScore):
         return conformity_score
     else:

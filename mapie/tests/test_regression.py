@@ -9,9 +9,11 @@ import pytest
 from sklearn.compose import ColumnTransformer
 from sklearn.datasets import make_regression
 from sklearn.dummy import DummyRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import (KFold, LeaveOneOut, ShuffleSplit,
+from sklearn.model_selection import (GroupKFold, KFold, LeaveOneOut,
+                                     PredefinedSplit, ShuffleSplit,
                                      train_test_split)
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -20,13 +22,12 @@ from typing_extensions import TypedDict
 
 from mapie._typing import NDArray
 from mapie.aggregation_functions import aggregate_all
-from mapie.conformity_scores import (AbsoluteConformityScore,
-                                     ConformityScore,
+from mapie.conformity_scores import (AbsoluteConformityScore, ConformityScore,
                                      GammaConformityScore,
                                      ResidualNormalisedScore)
+from mapie.estimator.estimator import EnsembleRegressor
 from mapie.metrics import regression_coverage_score
 from mapie.regression import MapieRegressor
-from mapie.estimator.estimator import EnsembleRegressor
 from mapie.subsample import Subsample
 
 X_toy = np.array([0, 1, 2, 3, 4, 5]).reshape(-1, 1)
@@ -211,7 +212,9 @@ def test_valid_agg_function(agg_function: str) -> None:
 
 @pytest.mark.parametrize(
     "cv", [None, -1, 2, KFold(), LeaveOneOut(),
-           ShuffleSplit(n_splits=1), "prefit", "split"]
+           ShuffleSplit(n_splits=1),
+           PredefinedSplit(test_fold=[-1]*3+[0]*3),
+           "prefit", "split"]
 )
 def test_valid_cv(cv: Any) -> None:
     """Test that valid cv raise no errors."""
@@ -357,6 +360,72 @@ def test_results_with_constant_sample_weights(strategy: str) -> None:
     np.testing.assert_allclose(y_pred1, y_pred2)
     np.testing.assert_allclose(y_pis0, y_pis1)
     np.testing.assert_allclose(y_pis1, y_pis2)
+
+
+@pytest.mark.parametrize("strategy", [*STRATEGIES])
+def test_results_with_constant_groups(strategy: str) -> None:
+    """
+    Test predictions when groups are None
+    or constant with different values.
+    """
+    n_samples = len(X)
+    mapie0 = MapieRegressor(**STRATEGIES[strategy])
+    mapie1 = MapieRegressor(**STRATEGIES[strategy])
+    mapie2 = MapieRegressor(**STRATEGIES[strategy])
+    mapie0.fit(X, y, groups=None)
+    mapie1.fit(X, y, groups=np.ones(shape=n_samples))
+    mapie2.fit(X, y, groups=np.ones(shape=n_samples) * 5)
+    y_pred0, y_pis0 = mapie0.predict(X, alpha=0.05)
+    y_pred1, y_pis1 = mapie1.predict(X, alpha=0.05)
+    y_pred2, y_pis2 = mapie2.predict(X, alpha=0.05)
+    np.testing.assert_allclose(y_pred0, y_pred1)
+    np.testing.assert_allclose(y_pred1, y_pred2)
+    np.testing.assert_allclose(y_pis0, y_pis1)
+    np.testing.assert_allclose(y_pis1, y_pis2)
+
+
+def test_results_with_groups() -> None:
+    """
+    Test predictions when groups specified (not None and
+    not constant).
+    """
+    X = np.array([0, 10, 20, 0, 10, 20]).reshape(-1, 1)
+    y = np.array([0, 10, 20, 0, 10, 20])
+    groups = np.array([1, 2, 3, 1, 2, 3])
+    estimator = DummyRegressor(strategy="mean")
+
+    strategy_no_group = dict(
+        estimator=estimator,
+        method="plus",
+        agg_function="mean",
+        cv=KFold(n_splits=3, shuffle=False),
+    )
+    strategy_group = dict(
+        estimator=estimator,
+        method="plus",
+        agg_function="mean",
+        cv=GroupKFold(n_splits=3),
+    )
+
+    mapie0 = MapieRegressor(**strategy_no_group)
+    mapie1 = MapieRegressor(**strategy_group)
+    mapie0.fit(X, y, groups=None)
+    mapie1.fit(X, y, groups=groups)
+    # check class member conformity_scores_ (abs(y - y_pred))
+    # cv folds with KFold:
+    # [(array([2, 3, 4, 5]), array([0, 1])),
+    #  (array([0, 1, 4, 5]), array([2, 3])),
+    #  (array([0, 1, 2, 3]), array([4, 5]))]
+    # cv folds with GroupKFold:
+    # [(array([0, 1, 3, 4]), array([2, 5])),
+    #  (array([0, 2, 3, 5]), array([1, 4])),
+    #  (array([1, 2, 4, 5]), array([0, 3]))]
+    y_pred_0 = [12.5, 12.5, 10, 10, 7.5, 7.5]
+    y_pred_1 = [15, 10, 5, 15, 10, 5]
+    conformity_scores_0 = np.abs(y - y_pred_0)
+    conformity_scores_1 = np.abs(y - y_pred_1)
+    assert np.array_equal(mapie0.conformity_scores_, conformity_scores_0)
+    assert np.array_equal(mapie1.conformity_scores_, conformity_scores_1)
 
 
 @pytest.mark.parametrize("strategy", [*STRATEGIES])
@@ -526,6 +595,7 @@ def test_aggregate_with_mask_with_invalid_agg_function() -> None:
         0.20,
         False
     )
+    ens_reg.use_split_method_ = False
     with pytest.raises(
         ValueError,
         match=r".*The value of self.agg_function is not correct*",
@@ -632,3 +702,49 @@ def test_return_multi_pred(ensemble: bool) -> None:
         X_toy, ensemble=ensemble, return_multi_pred=True
     )
     assert len(output) == 3
+
+
+def test_beta_optimize_user_warning() -> None:
+    """
+    Test that a UserWarning is displayed when optimize_beta is used.
+    """
+    mapie_reg = MapieRegressor(
+        conformity_score=AbsoluteConformityScore(sym=False)
+    ).fit(X, y)
+    with pytest.warns(
+        UserWarning, match=r"Beta optimisation should only be used for*",
+    ):
+        mapie_reg.predict(X, alpha=0.05, optimize_beta=True)
+
+
+def test_fit_parameters_passing() -> None:
+    """
+    Test passing fit parameters, here early stopping at iteration 3.
+    Checks that underlying GradientBoosting estimators have used 3 iterations
+    only during boosting, instead of default value for n_estimators (=100).
+    """
+    gb = GradientBoostingRegressor(random_state=random_state)
+
+    mapie = MapieRegressor(estimator=gb, random_state=random_state)
+
+    def early_stopping_monitor(i, est, locals):
+        """Returns True on the 3rd iteration."""
+        if i == 2:
+            return True
+        else:
+            return False
+
+    mapie.fit(X, y, monitor=early_stopping_monitor)
+
+    assert mapie.estimator_.single_estimator_.estimators_.shape[0] == 3
+
+    for estimator in mapie.estimator_.estimators_:
+        assert estimator.estimators_.shape[0] == 3
+
+
+def test_predict_infinite_intervals() -> None:
+    """Test that MapieRegressor produces infinite bounds with alpha=0"""
+    mapie_reg = MapieRegressor().fit(X, y)
+    _, y_pis = mapie_reg.predict(X, alpha=0., allow_infinite_bounds=True)
+    np.testing.assert_allclose(y_pis[:, 0, 0], -np.inf)
+    np.testing.assert_allclose(y_pis[:, 1, 0], np.inf)

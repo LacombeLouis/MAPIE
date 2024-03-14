@@ -2,11 +2,35 @@
 History
 =======
 
-##### (##########)
+0.8.3 (2024-03-01)
 ------------------
-* Add new checks for metrics calculations
-* Fix reference for residual normalised score in documentation
 
+* Allow the use of `y` and `groups` arguments MapieRegressor and MapieClassifier.
+* Add possibility of passing fit parameters used by estimators.
+* Fix memory issue CQR when testing for upper and lower bounds.
+* Add Winkler Interval Score.
+
+0.8.2 (2024-01-11)
+------------------
+
+* * Resolve issue still present in 0.8.1 by updating pandas.
+
+0.8.1 (2024-01-11)
+------------------
+
+* First attemps at fixing library conda issue.
+
+0.8.0 (2024-01-03)
+------------------
+
+* Add Adaptative Conformal Inference (ACI) method for MapieTimeSeriesRegressor.
+* Add Coverage Width-based Criterion (CWC) metric.
+* Allow to use more split methods for MapieRegressor (ShuffleSplit, PredefinedSplit).
+* Allow infinite prediction intervals to be produced in regressor classes.
+* Integrate ConformityScore into MapieTimeSeriesRegressor.
+* Add (extend) the optimal estimation strategy for the bounds of the prediction intervals for regression via ConformityScore.
+* Add new checks for metrics calculations.
+* Fix reference for residual normalised score in documentation.
 
 0.7.0 (2023-09-14)
 ------------------

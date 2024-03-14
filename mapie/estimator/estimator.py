@@ -5,15 +5,15 @@ from typing import List, Optional, Tuple, Union, cast
 import numpy as np
 from joblib import Parallel, delayed
 from sklearn.base import RegressorMixin, clone
-from sklearn.model_selection import BaseCrossValidator, ShuffleSplit
+from sklearn.model_selection import BaseCrossValidator
 from sklearn.utils import _safe_indexing
-from sklearn.utils.validation import (_num_samples, check_is_fitted)
+from sklearn.utils.validation import _num_samples, check_is_fitted
 
 from mapie._typing import ArrayLike, NDArray
 from mapie.aggregation_functions import aggregate_all, phi2D
-from mapie.utils import (check_nan_in_aposteriori_prediction,
-                         fit_estimator)
 from mapie.estimator.interface import EnsembleEstimator
+from mapie.utils import (check_nan_in_aposteriori_prediction, check_no_agg_cv,
+                         fit_estimator)
 
 
 class EnsembleRegressor(EnsembleEstimator):
@@ -152,6 +152,7 @@ class EnsembleRegressor(EnsembleEstimator):
         "single_estimator_",
         "estimators_",
         "k_",
+        "use_split_method_",
     ]
 
     def __init__(
@@ -181,6 +182,7 @@ class EnsembleRegressor(EnsembleEstimator):
         y: ArrayLike,
         train_index: ArrayLike,
         sample_weight: Optional[ArrayLike] = None,
+        **fit_params,
     ) -> RegressorMixin:
         """
         Fit a single out-of-fold model on a given training set.
@@ -203,6 +205,9 @@ class EnsembleRegressor(EnsembleEstimator):
             Sample weights. If None, then samples are equally weighted.
             By default ``None``.
 
+        **fit_params : dict
+            Additional fit parameters.
+
         Returns
         -------
         RegressorMixin
@@ -215,7 +220,11 @@ class EnsembleRegressor(EnsembleEstimator):
             sample_weight = cast(NDArray, sample_weight)
 
         estimator = fit_estimator(
-            estimator, X_train, y_train, sample_weight=sample_weight
+            estimator,
+            X_train,
+            y_train,
+            sample_weight=sample_weight,
+            **fit_params
         )
         return estimator
 
@@ -278,10 +287,10 @@ class EnsembleRegressor(EnsembleEstimator):
         ArrayLike of shape (n_samples_test,)
             Array of aggregated predictions for each testing sample.
         """
-        if self.method in self.no_agg_methods_ or self.cv in self.no_agg_cv_:
+        if self.method in self.no_agg_methods_ or self.use_split_method_:
             raise ValueError(
                 "There should not be aggregation of predictions "
-                f"if cv is in '{self.no_agg_cv_}' "
+                f"if cv is in '{self.no_agg_cv_}', if cv >=2 "
                 f"or if method is in '{self.no_agg_methods_}'."
             )
         elif self.agg_function == "median":
@@ -321,7 +330,12 @@ class EnsembleRegressor(EnsembleEstimator):
         y_pred_multi = self._aggregate_with_mask(y_pred_multi, self.k_)
         return y_pred_multi
 
-    def predict_calib(self, X: ArrayLike) -> NDArray:
+    def predict_calib(
+        self,
+        X: ArrayLike,
+        y: Optional[ArrayLike] = None,
+        groups: Optional[ArrayLike] = None
+    ) -> NDArray:
         """
         Perform predictions on X : the calibration set.
 
@@ -329,6 +343,17 @@ class EnsembleRegressor(EnsembleEstimator):
         ----------
         X: ArrayLike of shape (n_samples_test, n_features)
             Input data
+
+        y: Optional[ArrayLike] of shape (n_samples_test,)
+            Input labels.
+
+            By default ``None``.
+
+        groups: Optional[ArrayLike] of shape (n_samples_test,)
+            Group labels for the samples used while splitting the dataset into
+            train/test set.
+
+            By default ``None``.
 
         Returns
         -------
@@ -348,15 +373,17 @@ class EnsembleRegressor(EnsembleEstimator):
                     delayed(self._predict_oof_estimator)(
                         estimator, X, calib_index,
                     )
-                    for (_, calib_index), estimator in zip(cv.split(X),
-                                                           self.estimators_)
+                    for (_, calib_index), estimator in zip(
+                        cv.split(X, y, groups),
+                        self.estimators_
+                    )
                 )
                 predictions, indices = map(
                     list, zip(*outputs)
                 )
                 n_samples = _num_samples(X)
                 pred_matrix = np.full(
-                    shape=(n_samples, cv.get_n_splits(X)),
+                    shape=(n_samples, cv.get_n_splits(X, y, groups)),
                     fill_value=np.nan,
                     dtype=float,
                 )
@@ -376,6 +403,8 @@ class EnsembleRegressor(EnsembleEstimator):
         X: ArrayLike,
         y: ArrayLike,
         sample_weight: Optional[ArrayLike] = None,
+        groups: Optional[ArrayLike] = None,
+        **fit_params,
     ) -> EnsembleRegressor:
         """
         Fit the base estimator under the ``single_estimator_`` attribute.
@@ -394,7 +423,17 @@ class EnsembleRegressor(EnsembleEstimator):
 
         sample_weight: Optional[ArrayLike] of shape (n_samples,)
             Sample weights. If None, then samples are equally weighted.
+
             By default ``None``.
+
+        groups: Optional[ArrayLike] of shape (n_samples,)
+            Group labels for the samples used while splitting the dataset into
+            train/test set.
+
+            By default ``None``.
+
+        **fit_params : dict
+            Additional fit parameters.
 
         Returns
         -------
@@ -406,6 +445,7 @@ class EnsembleRegressor(EnsembleEstimator):
         estimators_: List[RegressorMixin] = []
         full_indexes = np.arange(_num_samples(X))
         cv = self.cv
+        self.use_split_method_ = check_no_agg_cv(X, self.cv, self.no_agg_cv_)
         estimator = self.estimator
         n_samples = _num_samples(y)
 
@@ -417,11 +457,16 @@ class EnsembleRegressor(EnsembleEstimator):
             )
         else:
             single_estimator_ = self._fit_oof_estimator(
-                clone(estimator), X, y, full_indexes, sample_weight
+                clone(estimator),
+                X,
+                y,
+                full_indexes,
+                sample_weight,
+                **fit_params
             )
             cv = cast(BaseCrossValidator, cv)
             self.k_ = np.full(
-                shape=(n_samples, cv.get_n_splits(X, y)),
+                shape=(n_samples, cv.get_n_splits(X, y, groups)),
                 fill_value=np.nan,
                 dtype=float,
             )
@@ -430,12 +475,18 @@ class EnsembleRegressor(EnsembleEstimator):
             else:
                 estimators_ = Parallel(self.n_jobs, verbose=self.verbose)(
                     delayed(self._fit_oof_estimator)(
-                        clone(estimator), X, y, train_index, sample_weight
+                        clone(estimator),
+                        X,
+                        y,
+                        train_index,
+                        sample_weight,
+                        **fit_params
                     )
-                    for train_index, _ in cv.split(X)
+                    for train_index, _ in cv.split(X, y, groups)
                 )
-            if isinstance(cv, ShuffleSplit):
-                single_estimator_ = estimators_[0]
+                # In split-CP, we keep only the model fitted on train dataset
+                if self.use_split_method_:
+                    single_estimator_ = estimators_[0]
 
         self.single_estimator_ = single_estimator_
         self.estimators_ = estimators_
@@ -487,7 +538,7 @@ class EnsembleRegressor(EnsembleEstimator):
         if not return_multi_pred and not ensemble:
             return y_pred
 
-        if self.method in self.no_agg_methods_ or self.cv in self.no_agg_cv_:
+        if self.method in self.no_agg_methods_ or self.use_split_method_:
             y_pred_multi_low = y_pred[:, np.newaxis]
             y_pred_multi_up = y_pred[:, np.newaxis]
         else:
@@ -496,9 +547,12 @@ class EnsembleRegressor(EnsembleEstimator):
             if self.method == "minmax":
                 y_pred_multi_low = np.min(y_pred_multi, axis=1, keepdims=True)
                 y_pred_multi_up = np.max(y_pred_multi, axis=1, keepdims=True)
-            else:
+            elif self.method == "plus":
                 y_pred_multi_low = y_pred_multi
                 y_pred_multi_up = y_pred_multi
+            else:
+                y_pred_multi_low = y_pred[:, np.newaxis]
+                y_pred_multi_up = y_pred[:, np.newaxis]
 
             if ensemble:
                 y_pred = aggregate_all(self.agg_function, y_pred_multi)

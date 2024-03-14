@@ -9,30 +9,20 @@ from numpy.random import RandomState
 from typing_extensions import TypedDict
 
 from mapie._typing import ArrayLike, NDArray
-from mapie.metrics import (add_jitter,
-                           classification_coverage_score,
+from mapie.metrics import (add_jitter, classification_coverage_score,
                            classification_coverage_score_v2,
-                           classification_mean_width_score,
-                           classification_ssc,
-                           classification_ssc_score,
-                           cumulative_differences,
-                           expected_calibration_error,
-                           hsic,
-                           kolmogorov_smirnov_cdf,
+                           classification_mean_width_score, classification_ssc,
+                           classification_ssc_score, coverage_width_based,
+                           cumulative_differences, expected_calibration_error,
+                           hsic, kolmogorov_smirnov_cdf,
                            kolmogorov_smirnov_p_value,
-                           kolmogorov_smirnov_statistic,
-                           kuiper_cdf,
-                           kuiper_p_value,
-                           kuiper_statistic,
-                           length_scale,
+                           kolmogorov_smirnov_statistic, kuiper_cdf,
+                           kuiper_p_value, kuiper_statistic, length_scale,
                            regression_coverage_score,
                            regression_coverage_score_v2,
-                           regression_mean_width_score,
-                           regression_ssc,
-                           regression_ssc_score,
-                           sort_xy_by_y,
-                           spiegelhalter_p_value,
-                           spiegelhalter_statistic,
+                           regression_mean_width_score, regression_mwi_score,
+                           regression_ssc, regression_ssc_score, sort_xy_by_y,
+                           spiegelhalter_p_value, spiegelhalter_statistic,
                            top_label_ece)
 
 y_toy = np.array([5, 7.5, 9.5, 10.5, 12.5])
@@ -194,6 +184,10 @@ def test_regression_ypredlow_shape() -> None:
         regression_coverage_score(y_toy, y_preds[:, :2], y_preds[:, 2])
     with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
         regression_mean_width_score(y_preds[:, :2], y_preds[:, 2])
+    with pytest.raises(ValueError):
+        coverage_width_based(
+            y_toy, y_preds[:1], y_preds[:, 2], eta=30, alpha=0.1
+        )
 
 
 def test_regression_ypredup_shape() -> None:
@@ -202,6 +196,10 @@ def test_regression_ypredup_shape() -> None:
         regression_coverage_score(y_toy, y_preds[:, 1], y_preds[:, 1:])
     with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
         regression_mean_width_score(y_preds[:, :2], y_preds[:, 2])
+    with pytest.raises(ValueError):
+        coverage_width_based(
+            y_toy, y_preds[:, 1], y_preds[:1], eta=30, alpha=0.1
+        )
 
 
 def test_regression_intervals_invalid_shape() -> None:
@@ -222,6 +220,11 @@ def test_regression_ytrue_invalid_shape() -> None:
         regression_ssc_score(np.tile(y_toy, 2).reshape(5, 2), y_preds)
     with pytest.raises(ValueError):
         hsic(np.tile(y_toy, 2).reshape(5, 2), y_preds)
+    with pytest.raises(ValueError):
+        coverage_width_based(
+            np.tile(y_toy, 2).reshape(5, 2), y_preds[:, 1], y_preds[:, 2],
+            eta=30, alpha=0.1
+        )
 
 
 def test_regression_valid_input_shape() -> None:
@@ -229,6 +232,7 @@ def test_regression_valid_input_shape() -> None:
     regression_ssc(y_toy, intervals)
     regression_ssc_score(y_toy, intervals)
     hsic(y_toy, intervals)
+    coverage_width_based(y_toy, y_preds[:, 1], y_preds[:, 2], eta=0, alpha=0.1)
 
 
 def test_regression_same_length() -> None:
@@ -243,6 +247,10 @@ def test_regression_same_length() -> None:
         regression_ssc_score(y_toy, intervals[:-1, ])
     with pytest.raises(ValueError, match=r".*shape mismatch*"):
         hsic(y_toy, intervals[:-1, ])
+    with pytest.raises(ValueError):
+        coverage_width_based(
+            y_toy, y_preds[:-1, 1], y_preds[:, 2], eta=0, alpha=0.1
+        )
 
 
 def test_regression_toydata_coverage_score() -> None:
@@ -611,6 +619,30 @@ def test_classification_coverage_score_v2_ypredset_invalid_shape() -> None:
         )
 
 
+def test_alpha_invalid_cwc_score() -> None:
+    """Test a non-valid value of mu in cwc score."""
+    with pytest.raises(ValueError):
+        coverage_width_based(
+            y_preds[:, 0], y_preds[:, 1], y_preds[:, 2], eta=30, alpha=-1
+        )
+
+
+def test_valid_eta() -> None:
+    """Test different values of eta in cwc metric."""
+    y, y_low, y_up = y_preds[:, 0], y_preds[:, 1], y_preds[:, 2]
+    cwb = coverage_width_based(y, y_low, y_up, eta=30, alpha=0.1)
+    np.testing.assert_allclose(cwb, 0.48, rtol=1e-2)
+
+    cwb = coverage_width_based(y, y_low, y_up, eta=0.01, alpha=0.1)
+    np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
+
+    cwb = coverage_width_based(y, y_low, y_up, eta=-1, alpha=0.1)
+    np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
+
+    cwb = coverage_width_based(y, y_low, y_up, eta=0, alpha=0.1)
+    np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
+
+
 @pytest.mark.parametrize("amplitude", [0.1, 0.01, 0.001])
 def test_add_jitter_amplitude(amplitude: float) -> None:
     """Test that noise perturbation is consistent with required amplitude"""
@@ -764,3 +796,32 @@ def test_spiegelhalter_p_value_calibrated() -> None:
     y_true = (uniform <= y_score).astype(float)
     ks_stat = spiegelhalter_p_value(y_true, y_score)
     np.testing.assert_allclose(ks_stat, 0.174832, atol=1e-6)
+
+
+def test_regression_mwi_score() -> None:
+    """
+    Test the mean Winkler interval score.
+    There are four predictions in y_pis.
+    For each the ground truth value is 10.0.
+    The first interval covers the true value.
+    The second interval is above the true value.
+    The third interval has lower > upper, i.e.
+    quantile crossing.
+    The fourth interval is below the true value.
+    """
+
+    y_true = np.array([10.0, 10.0, 10.0, 10.0])
+    y_pis = np.array([
+        [[5.0],
+            [15.0]],
+        [[15.0],
+            [25.0]],
+        [[12.0],
+            [8.0]],
+        [[-5.0],
+            [0.0]]])
+
+    alpha = 0.1
+
+    mwi_score = regression_mwi_score(y_true, y_pis, alpha)
+    np.testing.assert_allclose(mwi_score, 82.25, rtol=1e-2)

@@ -463,12 +463,14 @@ class MapieQuantileRegressor(MapieRegressor):
         X: ArrayLike,
         y: ArrayLike,
         sample_weight: Optional[ArrayLike] = None,
+        groups: Optional[ArrayLike] = None,
         X_calib: Optional[ArrayLike] = None,
         y_calib: Optional[ArrayLike] = None,
         calib_size: Optional[float] = 0.3,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
         shuffle: Optional[bool] = True,
         stratify: Optional[ArrayLike] = None,
+        **fit_params,
     ) -> MapieQuantileRegressor:
         """
         Fit estimator and compute residuals used for prediction intervals.
@@ -497,6 +499,9 @@ class MapieQuantileRegressor(MapieRegressor):
             for the calibration procedure.
 
             By default ``None``.
+
+        groups: Optional[ArrayLike] of shape (n_samples,)
+            Always ignored, exists for compatibility.
 
         X_calib: Optional[ArrayLike] of shape (n_calib_samples, n_features)
             Calibration data.
@@ -532,6 +537,9 @@ class MapieQuantileRegressor(MapieRegressor):
             Read more in the :ref:`User Guide <stratification>`.
 
             By default ``None``.
+
+        **fit_params : dict
+            Additional fit parameters.
 
         Returns
         -------
@@ -609,8 +617,13 @@ class MapieQuantileRegressor(MapieRegressor):
                 else:
                     cloned_estimator_.set_params(**params)
                 self.estimators_.append(fit_estimator(
-                    cloned_estimator_, X_train, y_train, sample_weight_train
-                ))
+                    cloned_estimator_,
+                    X_train,
+                    y_train,
+                    sample_weight_train,
+                    **fit_params,
+                    )
+                )
                 y_calib_preds[i] = self.estimators_[-1].predict(X_calib)
             self.single_estimator_ = self.estimators_[2]
 
@@ -633,6 +646,8 @@ class MapieQuantileRegressor(MapieRegressor):
         X: ArrayLike,
         ensemble: bool = False,
         alpha: Optional[Union[float, Iterable[float]]] = None,
+        optimize_beta: bool = False,
+        allow_infinite_bounds: bool = False,
         symmetry: Optional[bool] = True,
     ) -> Union[NDArray, Tuple[NDArray, NDArray]]:
         """
@@ -685,6 +700,7 @@ class MapieQuantileRegressor(MapieRegressor):
         )
         for i, est in enumerate(self.estimators_):
             y_preds[i] = est.predict(X)
+        check_lower_upper_bounds(y_preds[0], y_preds[1], y_preds[2])
         if symmetry:
             quantile = np.full(
                 2,
@@ -705,5 +721,5 @@ class MapieQuantileRegressor(MapieRegressor):
             )
         y_pred_low = y_preds[0][:, np.newaxis] - quantile[0]
         y_pred_up = y_preds[1][:, np.newaxis] + quantile[1]
-        check_lower_upper_bounds(y_preds, y_pred_low, y_pred_up)
+        check_lower_upper_bounds(y_pred_low, y_pred_up, y_preds[2])
         return y_preds[2], np.stack([y_pred_low, y_pred_up], axis=1)
