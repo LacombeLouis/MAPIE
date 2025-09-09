@@ -1,9 +1,16 @@
 """
-======================================================================
-Reproduction of part of the paper experiments of Zaffran et al. (2022)
-======================================================================
+=====================================================================================================
+Adaptive conformal predictions for time series, Zaffran et al. (2022)
+=====================================================================================================
 
-:class:`~mapie.regression.MapieTimeSeriesRegressor` is used to reproduce a
+Note: in this example, we use the following terms employed in the scientific literature:
+
+- `alpha` is equivalent to `1 - confidence_level`. It can be seen as a *risk level*
+- *calibrate* and *calibration* are equivalent to *conformalize* and *conformalization*.
+
+—
+
+:class:`~mapie.regression.TimeSeriesRegressor` is used to reproduce a
 part of the paper experiments of Zaffran et al. (2022) in their article [1]
 which we argue that Adaptive Conformal Inference (ACI, Gibbs & Candès, 2021)
 [2], developed for distribution-shift time series, is a good procedure for
@@ -44,9 +51,9 @@ from matplotlib import pylab as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import PredefinedSplit
 
-from mapie._typing import NDArray
+from numpy.typing import NDArray
 from mapie.conformity_scores import AbsoluteConformityScore
-from mapie.time_series_regression import MapieTimeSeriesRegressor
+from mapie.regression import TimeSeriesRegressor
 
 warnings.simplefilter("ignore")
 
@@ -178,7 +185,7 @@ gamma = 0.04
 
 model = init_model()
 
-mapie_aci = MapieTimeSeriesRegressor(
+mapie_aci = TimeSeriesRegressor(
     model,
     method="aci",
     agg_function="mean",
@@ -205,7 +212,7 @@ for i in range(min(test_size, iteration_max + 1)):
 
     # Predict on test dataset
     y_pred_aci_pfit[i:i+1], y_pis_aci_pfit[i:i+1] = mapie_aci.predict(
-        x_test, alpha=alpha, ensemble=False, optimize_beta=False
+        x_test, confidence_level=1-alpha, ensemble=False, optimize_beta=False
     )
 
     # Update the current_alpha_t (hidden for the user)

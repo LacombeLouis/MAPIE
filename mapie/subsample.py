@@ -9,22 +9,24 @@ from sklearn.model_selection import BaseCrossValidator
 from sklearn.utils import check_random_state, resample
 from sklearn.utils.validation import _num_samples
 
-from ._typing import NDArray
+from numpy.typing import NDArray
+from .utils import _check_n_samples
 
 
 class Subsample(BaseCrossValidator):
     """
     Generate a sampling method, that resamples the training set with
-    possible bootstraps. It can replace KFold or  LeaveOneOut as cv argument
-    in the MAPIE class.
+    possible bootstraps. It can be used as cv argument in
+    :class:`~mapie.regression.JackknifeAfterBootstrapRegressor`.
 
     Parameters
     ----------
     n_resamplings : int
         Number of resamplings. By default ``30``.
-    n_samples: int
+    n_samples: Union[int, float]
         Number of samples in each resampling. By default ``None``,
-        the size of the training set.
+        the size of the training set. If it is between 0 and 1,
+        it becomes the fraction of samples
     replace: bool
         Whether to replace samples in resamplings or not. By default ``True``.
     random_state: Optional[Union[int, RandomState]]
@@ -46,7 +48,7 @@ class Subsample(BaseCrossValidator):
     def __init__(
         self,
         n_resamplings: int = 30,
-        n_samples: Optional[int] = None,
+        n_samples: Optional[Union[int, float]] = None,
         replace: bool = True,
         random_state: Optional[Union[int, RandomState]] = None,
     ) -> None:
@@ -74,9 +76,7 @@ class Subsample(BaseCrossValidator):
             The testing set indices for that split.
         """
         indices = np.arange(_num_samples(X))
-        n_samples = (
-            self.n_samples if self.n_samples is not None else len(indices)
-        )
+        n_samples = _check_n_samples(X, self.n_samples, indices)
         random_state = check_random_state(self.random_state)
         for k in range(self.n_resamplings):
             train_index = resample(
@@ -105,7 +105,7 @@ class BlockBootstrap(BaseCrossValidator):  # type: ignore
     """
     Generate a sampling method, that block bootstraps the training set.
     It can replace KFold, LeaveOneOut or SubSample as cv argument in the
-    MapieRegressor class.
+    TimeSeriesRegressor class.
 
     Parameters
     ----------
@@ -170,6 +170,7 @@ class BlockBootstrap(BaseCrossValidator):  # type: ignore
             The training set indices for that split.
         test : NDArray of shape (n_indices_test,)
             The testing set indices for that split.
+
         Raises
         ------
         ValueError

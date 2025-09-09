@@ -12,18 +12,17 @@ from sklearn.utils.multiclass import type_of_target
 from sklearn.utils.validation import (_check_y, _num_samples, check_is_fitted,
                                       indexable)
 
-from ._typing import ArrayLike, NDArray
-from .utils import (check_estimator_classification,
-                    check_estimator_fit_predict, check_n_features_in,
-                    check_null_weight, fit_estimator, get_calib_set)
+from numpy.typing import ArrayLike, NDArray
+from .utils import (_check_estimator_classification,
+                    _check_estimator_fit_predict, _check_n_features_in,
+                    _check_null_weight, _fit_estimator, _get_calib_set)
 
 
-class MapieCalibrator(BaseEstimator, ClassifierMixin):
+class TopLabelCalibrator(BaseEstimator, ClassifierMixin):
     """
-    Calibration for multi-class problems.
-
-    This class performs calibration for various methods, currently only
-    top-label calibration [1].
+    Top-label calibration for multi-class problems.
+    Performs a calibration on the class with the highest score
+    given both score and class, see section 2 of [1].
 
     Parameters
     ----------
@@ -32,15 +31,6 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
         (i.e. with fit, predict, and predict_proba methods), by default
         ``None``.
         If ``None``, estimator defaults to a ``LogisticRegression`` instance.
-
-    method: Optional[str]
-        Method to choose for calibration method.
-        Choose among:
-
-        - "top_label", performs a calibration on the class with highest score
-        given both score and class, see section 2 of [1].
-
-        By default "top_label".
 
     calibrator : Optional[Union[str, RegressorMixin]]
         Any calibrator with scikit-learn API
@@ -54,7 +44,8 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
         The cross-validation strategy to compute scores :
 
         - "split", performs a standard splitting into a calibration and a
-        test set.
+          test set.
+
         - "prefit", assumes that ``estimator`` has been fitted already.
           All the data that are provided in the ``fit`` method are then used
           to calibrate the predictions through the score computation.
@@ -63,9 +54,6 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
 
     Attributes
     ----------
-    valid_methods: List[str]
-        List of all valid methods.
-
     classes_: NDArray
         Array with the name of each class.
 
@@ -91,21 +79,21 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
     Examples
     --------
     >>> import numpy as np
-    >>> from mapie.calibration import MapieCalibrator
+    >>> from mapie.calibration import TopLabelCalibrator
     >>> X_toy = np.arange(9).reshape(-1, 1)
     >>> y_toy = np.stack([0, 0, 1, 0, 1, 2, 1, 2, 2])
-    >>> mapie = MapieCalibrator().fit(X_toy, y_toy, random_state=20)
+    >>> mapie = TopLabelCalibrator().fit(X_toy, y_toy, random_state=20)
     >>> y_calib = mapie.predict_proba(X_toy)
     >>> print(y_calib)
-    [[0.84900723        nan        nan]
-     [0.75432411        nan        nan]
-     [0.62285341        nan        nan]
-     [       nan 0.33333333        nan]
-     [       nan 0.33333333        nan]
-     [       nan 0.33333333        nan]
-     [       nan        nan 0.33333002]
-     [       nan        nan 0.54326683]
-     [       nan        nan 0.66666124]]
+    [[0.84......        nan        nan]
+     [0.75......        nan        nan]
+     [0.62......        nan        nan]
+     [       nan 0.33......        nan]
+     [       nan 0.33......        nan]
+     [       nan 0.33......        nan]
+     [       nan        nan 0.33......]
+     [       nan        nan 0.54......]
+     [       nan        nan 0.66......]]
     """
 
     fit_attributes = [
@@ -118,8 +106,6 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
         "isotonic": IsotonicRegression(out_of_bounds="clip")
     }
 
-    valid_methods = ["top_label"]
-
     valid_cv = ["prefit", "split"]
 
     valid_inputs = ["multiclass", "binary"]
@@ -127,12 +113,10 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         estimator: Optional[ClassifierMixin] = None,
-        method: str = "top_label",
         calibrator: Optional[Union[str, RegressorMixin]] = None,
         cv: Optional[str] = "split",
     ) -> None:
         self.estimator = estimator
-        self.method = method
         self.calibrator = calibrator
         self.cv = cv
 
@@ -203,7 +187,7 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
                     "Please provide a string in: "
                     + (", ").join(self.named_calibrators.keys()) + "."
                 )
-        check_estimator_fit_predict(calibrator)
+        _check_estimator_fit_predict(calibrator)
         return calibrator
 
     def _get_labels(
@@ -238,21 +222,6 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
         max_class_prob = np.max(pred, axis=1).reshape(-1, 1)
         y_pred = self.classes_[np.argmax(pred, axis=1)]
         return max_class_prob, y_pred
-
-    def _check_method(self) -> None:
-        """
-        Check that the method is valid.
-
-        Raises
-        ------
-        ValueError
-            If the method does not belong to the valid methods.
-        """
-        if self.method not in self.valid_methods:
-            raise ValueError(
-                "Invalid method, allowed method are: "
-                + (", ").join(self.valid_methods) + "."
-            )
 
     def _check_type_of_target(self, y: ArrayLike):
         """
@@ -314,14 +283,14 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
             sample_weight_ = sample_weight[given_label_indices]
             (
                 sample_weight_, top_class_prob_, y_calib_
-            ) = check_null_weight(
+            ) = _check_null_weight(
                 sample_weight_,
                 top_class_prob_,
                 y_calib_
             )
         else:
             sample_weight_ = sample_weight
-        calibrator_ = fit_estimator(
+        calibrator_ = _fit_estimator(
             calibrator_, top_class_prob_, y_calib_, sample_weight_
         )
         return calibrator_
@@ -432,7 +401,7 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
         shuffle: Optional[bool] = True,
         stratify: Optional[ArrayLike] = None,
         **fit_params,
-    ) -> MapieCalibrator:
+    ) -> TopLabelCalibrator:
         """
         Calibrate the estimator on given datasets, according to the chosen
         method.
@@ -472,18 +441,17 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
 
         Returns
         -------
-        MapieCalibrator
+        TopLabelCalibrator
             The model itself.
         """
-        self._check_method()
         cv = self._check_cv(self.cv)
         X, y = indexable(X, y)
         y = _check_y(y)
         self._check_type_of_target(y)
-        estimator = check_estimator_classification(X, y, cv, self.estimator)
+        estimator = _check_estimator_classification(X, y, cv, self.estimator)
         calibrator = self._check_calibrator(self.calibrator)
-        sample_weight, X, y = check_null_weight(sample_weight, X, y)
-        self.n_features_in_ = check_n_features_in(X, cv, estimator)
+        sample_weight, X, y = _check_null_weight(sample_weight, X, y)
+        self.n_features_in_ = _check_n_features_in(X, cv, estimator)
         random_state = check_random_state(random_state)
 
         if cv == "prefit":
@@ -494,7 +462,7 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
                 X, y, sample_weight, calibrator
             )
         if cv == "split":
-            results = get_calib_set(
+            results = _get_calib_set(
                 X,
                 y,
                 sample_weight=sample_weight,
@@ -506,12 +474,12 @@ class MapieCalibrator(BaseEstimator, ClassifierMixin):
             X_train, y_train, X_calib, y_calib, sw_train, sw_calib = results
             X_train, y_train = indexable(X_train, y_train)
             y_train = _check_y(y_train)
-            sw_train, X_train, y_train = check_null_weight(
+            sw_train, X_train, y_train = _check_null_weight(
                 sw_train,
                 X_train,
                 y_train
             )
-            estimator = fit_estimator(
+            estimator = _fit_estimator(
                 clone(estimator), X_train, y_train, sw_train, **fit_params,
             )
             self.single_estimator_ = estimator

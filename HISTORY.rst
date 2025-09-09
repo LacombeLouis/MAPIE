@@ -2,6 +2,106 @@
 History
 =======
 
+1.x.x (2025-xx-xx)
+------------------
+
+* Fix warnings when running tests
+* Rework risk control documentation
+* Fix incorrect URL in PrecisionRecallController docstring
+* Delete redundant risk control notebooks
+* Add link to Thibault Cordier's repository on risk control
+* Add scientific references for regression conformity scores
+* Fix double inference when using `predict_set` function in split conformal classification
+* Add FAQ entry in the documentation about ongoing works to extend MAPIE for LLM control
+* MAPIE now supports Python versions up to the latest release (currently 3.13)
+* Change `prefit` default value to `True` in split methods' docstrings to remain consistent with the implementation
+* Fix issue 699 to replace `TimeSeriesRegressor.partial_fit` with `TimeSeriesRegressor.update`
+
+1.0.1 (2025-05-22)
+------------------
+
+* Patch following v1.0.0 release: removing dependence to typing_extensions, making MAPIE unusable if this package is not installed
+
+1.0.0 (2025-05-22)
+------------------
+
+* Major update, including a complete classification and regression public API rework, and a documentation revamp
+* Other parts of the public API have been improved as well
+* See the v1_release_notes.rst documentation file for extensive and user-focused release notes
+* This update also includes bugfixes and developer experience improvements
+
+0.9.2 (2025-01-15)
+------------------
+
+* Fix issue 525 in contribution guidelines with syntax errors in hyperlinks and other formatting issues.
+* Fix issue 495 to center correctly the prediction intervals
+* Fix issue 528 to correct broken ENS image in the documentation
+* Fix issue 548 to correct labels generated in tutorial
+* Fix issue 547 to fix wrong warning
+* Fix issue 480 (correct display of mathematical equations in generated notebooks)
+* Temporary solution waiting for issue 588 to be fixed (optimize_beta not working)
+* Remove several irrelevant user warnings
+* Limit max sklearn version allowed at MAPIE installation
+* Refactor MapieRegressor, EnsembleRegressor, and MapieQuantileRegressor, to prepare for the release of v1.0.0
+* Documentation build: fix warnings, fix image generation, update sklearn version requirement
+* Documentation test: add a doc testing step (in MAKEFILE and CI)
+* Increase max line length from 79 to 88 characters
+* Bump wheel version
+* Other minor evolutions
+
+0.9.1 (2024-09-13)
+------------------
+
+* Fix issue 511 to access non-conformity scores with previous path
+* Update gitignore by including the documentation folder generated for Mondrian
+* Fix (partially) the set-up with pip instead of conda for new contributors
+
+0.9.0 (2024-09-03)
+------------------
+
+* Fix citations and license links
+* Fix the CQR tutorial to have same data in both methods
+* Add `** predict_params` in fit and predict method for Mapie Classifier
+* Add Mondrian Conformal Prediction for regression and classification
+* Add `** predict_params` in fit and predict method for Mapie Regression
+* Update the ts-changepoint notebook with the tutorial
+* Change import related to conformity scores into ts-changepoint notebook
+* Replace `assert np.array_equal` by `np.testing.assert_array_equal` in Mapie unit tests
+* Replace `github.com/simai-ml/MAPIE` by `github.com/scikit-learn-contrib/MAPIE`in all Mapie files
+* Extend `ConformityScore` to support regression (with `BaseRegressionScore`) and to support classification (with `BaseClassificationScore`)
+* Extend `EnsembleEstimator` to support regression (with `EnsembleRegressor`) and to support classification (with `EnsembleClassifier`)
+* Refactor `MapieClassifier` by separating the handling of the `MapieClassifier` estimator into a new class called `EnsembleClassifier`
+* Refactor `MapieClassifier` by separating the handling of the `MapieClassifier` conformity score into a new class called `BaseClassificationScore`
+* Add severals non-conformity scores for classification (`LAC`, `APS`, `RAPS`, `TopK`) based on `BaseClassificationScore`
+* Transfer the logic of classification methods into the non-conformity score classes (`LAC`, `APS`, `RAPS`, `TopK`)
+* Extend the classification strategy definition by supporting `method` and `conformity_score` attributes
+* Building unit tests for different `Subsample` and `BlockBooststrap` instances
+* Change the sign of C_k in the `Kolmogorov-Smirnov` test documentation
+* Building a training set with a fraction between 0 and 1 with `n_samples` attribute when using `split` method from `Subsample` class.
+
+0.8.6 (2024-06-14)
+------------------
+
+* Fix the quantile formula to ensure valid coverage (deal with infinite interval production and asymmetric conformal scores).
+* Fix sphinx dependencies
+
+0.8.5 (2024-06-07)
+------------------
+
+* Issue with update from 0.8.4
+
+0.8.4 (2024-06-07)
+------------------
+
+* Fix the quantile formula to ensure valid coverage for any number of calibration data in `ConformityScore`.
+* Fix overloading of the value of the `method` attribute when using `MapieRegressor` and `MapieTimeSeriesRegressor`.
+* Fix conda versionning.
+* Reduce precision for test in `MapieCalibrator`.
+* Fix invalid certificate when downloading data.
+* Add citations utility to the documentation.
+* Add documentation for metrics.
+* Add explanation and example for symmetry argument in CQR.
+
 0.8.3 (2024-03-01)
 ------------------
 
@@ -13,7 +113,7 @@ History
 0.8.2 (2024-01-11)
 ------------------
 
-* * Resolve issue still present in 0.8.1 by updating pandas.
+* Resolve issue still present in 0.8.1 by updating pandas.
 
 0.8.1 (2024-01-11)
 ------------------

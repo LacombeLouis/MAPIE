@@ -5,8 +5,6 @@ channels:
 dependencies:
     - codecov
     - flake8
-    - mypy
+    - mypy<1.15
     - pandas
     - pytest-cov
-    - scikit-learn
-    - typed-ast

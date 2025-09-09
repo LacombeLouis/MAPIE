@@ -1,12 +1,19 @@
-.. title:: Theoretical Description : contents
+.. title:: Theoretical Description Regression : contents
 
 .. _theoretical_description_regression:
 
-=======================
+#######################
 Theoretical Description
-=======================
+#######################
 
-The :class:`mapie.regression.MapieRegressor` class uses various
+Note: in theoretical parts of the documentation, we use the following terms employed in the scientific literature:
+
+- `alpha` is equivalent to `1 - confidence_level`. It can be seen as a *risk level*
+- *calibrate* and *calibration*, are equivalent to *conformalize* and *conformalization*.
+
+—
+
+The methods in `mapie.regression` use various
 resampling methods based on the jackknife strategy
 recently introduced by Foygel-Barber et al. (2020) [1]. 
 They allow the user to estimate robust prediction intervals with any kind of
@@ -58,7 +65,7 @@ The figure below illustrates the naive method.
    :align: center
 
 2. The split method
-=====================
+===================
 
 The so-called split method computes the residuals of a calibration dataset to estimate the 
 typical error obtained on a new test data point. 
@@ -77,8 +84,7 @@ where :math:`\hat{q}_{n, \alpha}^+` is the :math:`(1-\alpha)` quantile of the di
 Since this method estimates the conformity scores only on a calibration set, one must have enough
 observations to split its original dataset into train and calibration as mentioned in [5]. We can
 notice that this method is very similar to the naive one, the only difference being that the conformity
-scores are not computed on the calibration set. Moreover, this method will always give prediction intervals
-with a constant width.
+scores are not computed on the training set but on the calibration set instead.
   
 
 3. The jackknife method
@@ -100,7 +106,7 @@ Estimating the prediction intervals is carried out in three main steps:
   
 .. math:: \hat{\mu}(X_{n+1}) \pm ((1-\alpha) \textrm{ quantile of } |Y_1-\hat{\mu}_{-1}(X_1)|, ..., |Y_n-\hat{\mu}_{-n}(X_n)|)
 
-The resulting confidence interval can therefore be summarized as follows
+The resulting prediction interval can therefore be summarized as follows
 
 .. math:: \hat{C}_{n, \alpha}^{\rm jackknife}(X_{n+1}) = [ \hat{q}_{n, \alpha}^-\{\hat{\mu}(X_{n+1}) - R_i^{\rm LOO} \}, \hat{q}_{n, \alpha}^+\{\hat{\mu}(X_{n+1}) + R_i^{\rm LOO} \}] 
 
@@ -123,7 +129,7 @@ Unlike the standard jackknife method which estimates a prediction interval cente
 around the prediction of the model trained on the entire dataset, the so-called jackknife+ 
 method uses each leave-one-out prediction on the new test point to take the variability of the 
 regression function into account.
-The resulting confidence interval can therefore be summarized as follows
+The resulting prediction interval can therefore be summarized as follows
 
 .. math:: \hat{C}_{n, \alpha}^{\rm jackknife+}(X_{n+1}) = [ \hat{q}_{n, \alpha}^-\{\hat{\mu}_{-i}(X_{n+1}) - R_i^{\rm LOO} \}, \hat{q}_{n, \alpha}^+\{\hat{\mu}_{-i}(X_{n+1}) + R_i^{\rm LOO} \}] 
 
@@ -245,30 +251,48 @@ uncertainty is higher than :math:`CV+`, because the models' prediction spread
 is then higher.
 
 
-9. The conformalized quantile regression (CQR) method
+9. The Conformalized Quantile Regression (CQR) Method
 =====================================================
 
-The conformalized quantile method allows for better interval widths with
-heteroscedastic data. It uses quantile regressors with different quantile
-values to estimate the prediction bounds and the residuals of these methods are
-used to create the guaranteed coverage value.
+The conformalized quantile regression (CQR) method allows for better interval widths with
+heteroscedastic data. It uses quantile regressors with different quantile values to estimate
+the prediction bounds. The residuals of these methods are used to create the guaranteed
+coverage value.
 
-.. math:: 
+The figure below illustrates the conformalized quantile regression method.
 
-    \hat{C}_{n, \alpha}^{\rm CQR}(X_{n+1}) = 
-    [\hat{q}_{\alpha_{lo}}(X_{n+1}) - Q_{1-\alpha}(E_{low}, \mathcal{I}_2),
-    \hat{q}_{\alpha_{hi}}(X_{n+1}) + Q_{1-\alpha}(E_{high}, \mathcal{I}_2)]
+.. image:: images/cqr.png
+   :width: 800
 
-Where :math:`Q_{1-\alpha}(E, \mathcal{I}_2) := (1-\alpha)(1+1/ |\mathcal{I}_2|)`-th
-empirical quantile of :math:`{E_i : i \in \mathcal{I}_2}` and :math:`\mathcal{I}_2` is the
-residuals of the estimator fitted on the calibration set. Note that in the symmetric method, 
-:math:`E_{low}` and :math:`E_{high}` are equal.
+Notations and Definitions
+-------------------------
+- :math:`\mathcal{I}_1` is the set of indices of the data in the training set.
+- :math:`\mathcal{I}_2` is the set of indices of the data in the calibration set.
+- :math:`\hat{q}_{\alpha_{\text{low}}}`: Lower quantile model trained on :math:`{(X_i, Y_i) : i \in \mathcal{I}_1}`.
+- :math:`\hat{q}_{\alpha_{\text{high}}}`: Upper quantile model trained on :math:`{(X_i, Y_i) : i \in \mathcal{I}_1}`.
+- :math:`E_i`: Residuals for the i-th sample in the calibration set.
+- :math:`E_{\text{low}}`: Residuals from the lower quantile model.
+- :math:`E_{\text{high}}`: Residuals from the upper quantile model.
+- :math:`Q_{1-\alpha}(E, \mathcal{I}_2)`: The :math:`(1-\alpha)(1+1/|\mathcal{I}_2|)`-th empirical quantile of the set :math:`{E_i : i \in \mathcal{I}_2}`.
 
-As justified by [3], this method offers a theoretical guarantee of the target coverage 
-level :math:`1-\alpha`.
+Mathematical Formulation
+------------------------
+The prediction interval :math:`\hat{C}_{n, \alpha}^{\text{CQR}}(X_{n+1})` for a new sample :math:`X_{n+1}` is given by:
 
-Note that only the split method has been implemented and that it will run three separate 
-regressions when using :class:`mapie.quantile_regression.MapieQuantileRegressor`.
+.. math::
+
+    \hat{C}_{n, \alpha}^{\text{CQR}}(X_{n+1}) = 
+    [\hat{q}_{\alpha_{\text{lo}}}(X_{n+1}) - Q_{1-\alpha}(E_{\text{low}}, \mathcal{I}_2),
+    \hat{q}_{\alpha_{\text{hi}}}(X_{n+1}) + Q_{1-\alpha}(E_{\text{high}}, \mathcal{I}_2)]
+
+Where:
+
+- :math:`\hat{q}_{\alpha_{\text{lo}}}(X_{n+1})` is the predicted lower quantile for the new sample.
+- :math:`\hat{q}_{\alpha_{\text{hi}}}(X_{n+1})` is the predicted upper quantile for the new sample.
+
+Note: In the symmetric method, :math:`E_{\text{low}}` and :math:`E_{\text{high}}` sets are no longer distinct. We consider directly the union set :math:`E_{\text{all}} = E_{\text{low}} \cup E_{\text{high}}` and the empirical quantile is then calculated on all the absolute (positive) residuals.
+
+As justified by the literature, this method offers a theoretical guarantee of the target coverage level :math:`1-\alpha`.
 
 
 10. The ensemble batch prediction intervals (EnbPI) method
@@ -280,7 +304,7 @@ hypothesis". It means that the probability law of data should not change up to
 reordering.
 This hypothesis is not relevant in many cases, notably for dynamical times series.
 That is why a specific class is needed, namely
-:class:`mapie.time_series_regression.MapieTimeSeriesRegressor`.
+:class:`mapie.time_series_regression.TimeSeriesRegressor`.
 
 Its implementation looks like the jackknife+-after-bootstrap method. The
 leave-one-out (LOO) estimators are approximated thanks to a few boostraps.

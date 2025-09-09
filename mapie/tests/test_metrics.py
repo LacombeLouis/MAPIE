@@ -8,22 +8,34 @@ import pytest
 from numpy.random import RandomState
 from typing_extensions import TypedDict
 
-from mapie._typing import ArrayLike, NDArray
-from mapie.metrics import (add_jitter, classification_coverage_score,
-                           classification_coverage_score_v2,
-                           classification_mean_width_score, classification_ssc,
-                           classification_ssc_score, coverage_width_based,
-                           cumulative_differences, expected_calibration_error,
-                           hsic, kolmogorov_smirnov_cdf,
-                           kolmogorov_smirnov_p_value,
-                           kolmogorov_smirnov_statistic, kuiper_cdf,
-                           kuiper_p_value, kuiper_statistic, length_scale,
-                           regression_coverage_score,
-                           regression_coverage_score_v2,
-                           regression_mean_width_score, regression_mwi_score,
-                           regression_ssc, regression_ssc_score, sort_xy_by_y,
-                           spiegelhalter_p_value, spiegelhalter_statistic,
-                           top_label_ece)
+from numpy.typing import ArrayLike, NDArray
+from mapie.metrics.calibration import (spiegelhalter_p_value)
+from mapie.metrics.calibration import (
+    add_jitter,
+    cumulative_differences,
+    expected_calibration_error,
+    kolmogorov_smirnov_cdf,
+    kolmogorov_smirnov_p_value,
+    kolmogorov_smirnov_statistic,
+    kuiper_cdf,
+    kuiper_p_value,
+    kuiper_statistic,
+    length_scale,
+    sort_xy_by_y,
+    spiegelhalter_statistic,
+    top_label_ece,
+)
+from mapie.metrics.classification import (
+    classification_mean_width_score,
+    classification_coverage_score,
+    classification_ssc, classification_ssc_score,
+)
+from mapie.metrics.regression import (
+    regression_mean_width_score,
+    regression_coverage_score,
+    regression_ssc,
+    regression_ssc_score, hsic, coverage_width_based, regression_mwi_score,
+)
 
 y_toy = np.array([5, 7.5, 9.5, 10.5, 12.5])
 y_preds = np.array([
@@ -180,25 +192,17 @@ y_true = prng.randint(0, 2, 51)
 
 def test_regression_ypredlow_shape() -> None:
     """Test shape of y_pred_low."""
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        regression_coverage_score(y_toy, y_preds[:, :2], y_preds[:, 2])
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        regression_mean_width_score(y_preds[:, :2], y_preds[:, 2])
     with pytest.raises(ValueError):
         coverage_width_based(
-            y_toy, y_preds[:1], y_preds[:, 2], eta=30, alpha=0.1
+            y_toy, y_preds[:1], y_preds[:, 2], eta=30, confidence_level=0.9
         )
 
 
 def test_regression_ypredup_shape() -> None:
     """Test shape of y_pred_up."""
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        regression_coverage_score(y_toy, y_preds[:, 1], y_preds[:, 1:])
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        regression_mean_width_score(y_preds[:, :2], y_preds[:, 2])
     with pytest.raises(ValueError):
         coverage_width_based(
-            y_toy, y_preds[:, 1], y_preds[:1], eta=30, alpha=0.1
+            y_toy, y_preds[:, 1], y_preds[:1], eta=30, confidence_level=0.9
         )
 
 
@@ -223,7 +227,7 @@ def test_regression_ytrue_invalid_shape() -> None:
     with pytest.raises(ValueError):
         coverage_width_based(
             np.tile(y_toy, 2).reshape(5, 2), y_preds[:, 1], y_preds[:, 2],
-            eta=30, alpha=0.1
+            eta=30, confidence_level=0.9
         )
 
 
@@ -232,15 +236,14 @@ def test_regression_valid_input_shape() -> None:
     regression_ssc(y_toy, intervals)
     regression_ssc_score(y_toy, intervals)
     hsic(y_toy, intervals)
-    coverage_width_based(y_toy, y_preds[:, 1], y_preds[:, 2], eta=0, alpha=0.1)
+    coverage_width_based(
+        y_toy, y_preds[:, 1], y_preds[:, 2], eta=0, confidence_level=0.9
+    )
+    regression_mean_width_score(intervals)
 
 
 def test_regression_same_length() -> None:
     """Test when y_true and y_preds have different lengths."""
-    with pytest.raises(ValueError, match=r".*arrays with different len*"):
-        regression_coverage_score(y_toy, y_preds[:-1, 1], y_preds[:-1, 2])
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        regression_mean_width_score(y_preds[:, :2], y_preds[:, 2])
     with pytest.raises(ValueError, match=r".*shape mismatch*"):
         regression_ssc(y_toy, intervals[:-1, ])
     with pytest.raises(ValueError, match=r".*shape mismatch*"):
@@ -249,40 +252,18 @@ def test_regression_same_length() -> None:
         hsic(y_toy, intervals[:-1, ])
     with pytest.raises(ValueError):
         coverage_width_based(
-            y_toy, y_preds[:-1, 1], y_preds[:, 2], eta=0, alpha=0.1
+            y_toy, y_preds[:-1, 1], y_preds[:, 2], eta=0, confidence_level=0.9
         )
 
 
 def test_regression_toydata_coverage_score() -> None:
     """Test coverage_score for toy data."""
-    scr = regression_coverage_score(y_toy, y_preds[:, 1], y_preds[:, 2])
-    assert scr == 0.8
-
-
-def test_regression_ytrue_type_coverage_score() -> None:
-    """Test that list(y_true) gives right coverage."""
-    scr = regression_coverage_score(list(y_toy), y_preds[:, 1], y_preds[:, 2])
-    assert scr == 0.8
-
-
-def test_regression_ypredlow_type_coverage_score() -> None:
-    """Test that list(y_pred_low) gives right coverage."""
-    scr = regression_coverage_score(y_toy, list(y_preds[:, 1]), y_preds[:, 2])
-    assert scr == 0.8
-
-
-def test_regression_ypredup_type_coverage_score() -> None:
-    """Test that list(y_pred_up) gives right coverage."""
-    scr = regression_coverage_score(y_toy, y_preds[:, 1], list(y_preds[:, 2]))
+    scr = regression_coverage_score(y_toy, y_preds[:, 1:])[0]
     assert scr == 0.8
 
 
 def test_classification_y_true_shape() -> None:
     """Test shape of y_true."""
-    with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
-        classification_coverage_score(
-            np.tile(y_true_class, (2, 1)), y_pred_set
-        )
     with pytest.raises(ValueError, match=r".*y should be a 1d array*"):
         classification_ssc(np.tile(y_true_class, (2, 1)), y_pred_set_2alphas)
     with pytest.raises(ValueError, match=r".*are arrays with different len*"):
@@ -292,8 +273,6 @@ def test_classification_y_true_shape() -> None:
 
 def test_classification_y_pred_set_shape() -> None:
     """Test shape of y_pred_set."""
-    with pytest.raises(ValueError, match=r".*Expected 2D array*"):
-        classification_coverage_score(y_true_class, y_pred_set[:, 0])
     with pytest.raises(ValueError, match=r".*should be a 3D array*"):
         classification_ssc(y_true_class, y_pred_set[:, 0])
     with pytest.raises(ValueError, match=r".*should be a 3D array*"):
@@ -314,53 +293,24 @@ def test_classification_valid_input_shape() -> None:
     """Test that valid inputs shape raise no error."""
     classification_ssc(y_true_class, y_pred_set_2alphas)
     classification_ssc_score(y_true_class, y_pred_set_2alphas)
+    classification_mean_width_score(y_pred_set_2alphas)
 
 
 def test_classification_toydata() -> None:
     """Test coverage_score for toy data."""
-    assert classification_coverage_score(y_true_class, y_pred_set) == 0.8
+    assert classification_coverage_score(y_true_class, y_pred_set)[0] == 0.8
 
 
-def test_classification_ytrue_type() -> None:
-    """Test that list(y_true_class) gives right coverage."""
-    scr = classification_coverage_score(list(y_true_class), y_pred_set)
-    assert scr == 0.8
+def test_classification_mean_width_score_toydata() -> None:
+    """Test classification_mean_width_score for toy data."""
+    scr = classification_mean_width_score(y_pred_set_2alphas)
+    np.testing.assert_allclose(scr, [2.2, 1.8], rtol=1e-2, atol=1e-2)
 
 
-def test_classification_y_pred_set_type() -> None:
-    """Test that list(y_pred_set) gives right coverage."""
-    scr = classification_coverage_score(y_true_class, list(y_pred_set))
-    assert scr == 0.8
-
-
-@pytest.mark.parametrize("pred_set", [y_pred_set, list(y_pred_set)])
-def test_classification_toydata_width(pred_set: ArrayLike) -> None:
-    """Test width mean for toy data."""
-    assert classification_mean_width_score(pred_set) == 2.0
-
-
-def test_classification_y_pred_set_width_shape() -> None:
-    """Test shape of y_pred_set in classification_mean_width_score."""
-    with pytest.raises(ValueError, match=r".*Expected 2D array*"):
-        classification_mean_width_score(y_pred_set[:, 0])
-
-
-def test_regression_toydata_mean_width_score() -> None:
-    """Test mean_width_score for toy data."""
-    scr = regression_mean_width_score(y_preds[:, 1], y_preds[:, 2])
-    assert scr == 2.3
-
-
-def test_regression_ypredlow_type_mean_width_score() -> None:
-    """Test that list(y_pred_low) gives right coverage."""
-    scr = regression_mean_width_score(list(y_preds[:, 1]), y_preds[:, 2])
-    assert scr == 2.3
-
-
-def test_regression_ypredup_type_mean_width_score() -> None:
-    """Test that list(y_pred_up) gives right coverage."""
-    scr = regression_mean_width_score(y_preds[:, 1], list(y_preds[:, 2]))
-    assert scr == 2.3
+def test_regression_mean_width_score_toydata() -> None:
+    """Test regression_mean_width_score for toy data."""
+    scr = regression_mean_width_score(intervals)
+    np.testing.assert_allclose(scr, [2.3, 2.2], rtol=1e-2, atol=1e-2)
 
 
 def test_ece_score() -> None:
@@ -381,7 +331,7 @@ def test_ece_scores() -> None:
     assert np.round(scr, 4) == 0.5363
 
 
-def test_top_lable_ece() -> None:
+def test_top_label_ece() -> None:
     """Test that score is """
     scr = top_label_ece(y_true, y_scores)
     assert np.round(scr, 4) == 0.6997
@@ -389,7 +339,7 @@ def test_top_lable_ece() -> None:
 
 def test_top_label_same_result() -> None:
     """
-    Test that we have the same results if the input contais
+    Test that we have the same results if the input contains
     the maximum with the argmax values or if it is the probabilities
     """
     pred_proba_ = np.array(
@@ -568,53 +518,28 @@ def test_hsic_correlation_value() -> None:
     np.testing.assert_allclose(coef, np.array([0.16829506, 0.3052798]))
 
 
-def test_regression_coverage_v1andv2() -> None:
-    """
-    Test that ``regression_coverage_score`` and
-    ```regression_coverage_score_v2``` returns the same results
-    """
-    cov_v1 = regression_coverage_score(
-        y_toy, intervals[:, 0, 0], intervals[:, 1, 0]
-    )
-    cov_v2 = regression_coverage_score_v2(np.expand_dims(y_toy, 1), intervals)
-    np.testing.assert_allclose(cov_v1, cov_v2[0])
-
-
-def test_regression_coverage_score_v2_ytrue_valid_shape() -> None:
+def test_regression_coverage_score_ytrue_valid_shape() -> None:
     """Test that no error is raised if y_true has the shape (n_samples,)."""
-    regression_coverage_score_v2(y_toy, intervals)
+    regression_coverage_score(y_toy, intervals)
 
 
-def test_regression_coverage_score_v2_intervals_invalid_shape() -> None:
+def test_regression_coverage_score_intervals_invalid_shape() -> None:
     """Test that an error is raised if intervals has not the good shape."""
     with pytest.raises(ValueError):
-        regression_coverage_score_v2(
+        regression_coverage_score(
             np.expand_dims(y_toy, 1), intervals[:, 0, 0]
         )
 
 
-def test_classification_coverage_v1andv2() -> None:
-    """
-    Test that ``classification_coverage_score`` and
-    ```classification_coverage_score_v2``` returns the same results
-    """
-    cov_v1 = classification_coverage_score(y_true_class, y_pred_set)
-    cov_v2 = classification_coverage_score_v2(
-        np.expand_dims(y_true_class, axis=1),
-        np.expand_dims(y_pred_set, axis=2)
-    )
-    np.testing.assert_allclose(cov_v1, cov_v2[0])
-
-
-def test_classification_coverage_score_v2_ytrue_valid_shape() -> None:
+def test_classification_coverage_score_ytrue_valid_shape() -> None:
     """Test that no error is raised if y_true has a shape (n_samples,)."""
-    classification_coverage_score_v2(y_true_class, y_pred_set_2alphas)
+    classification_coverage_score(y_true_class, y_pred_set_2alphas)
 
 
-def test_classification_coverage_score_v2_ypredset_invalid_shape() -> None:
+def test_classification_coverage_score_ypredset_invalid_shape() -> None:
     """Test that an error is raised if y_pred_set has not the good shape."""
     with pytest.raises(ValueError):
-        classification_coverage_score_v2(
+        classification_coverage_score(
             np.expand_dims(y_true_class, axis=1), y_pred_set[:, 0]
         )
 
@@ -623,23 +548,23 @@ def test_alpha_invalid_cwc_score() -> None:
     """Test a non-valid value of mu in cwc score."""
     with pytest.raises(ValueError):
         coverage_width_based(
-            y_preds[:, 0], y_preds[:, 1], y_preds[:, 2], eta=30, alpha=-1
+            y_preds[:, 0], y_preds[:, 1], y_preds[:, 2], eta=30, confidence_level=-1
         )
 
 
 def test_valid_eta() -> None:
     """Test different values of eta in cwc metric."""
     y, y_low, y_up = y_preds[:, 0], y_preds[:, 1], y_preds[:, 2]
-    cwb = coverage_width_based(y, y_low, y_up, eta=30, alpha=0.1)
+    cwb = coverage_width_based(y, y_low, y_up, eta=30, confidence_level=0.9)
     np.testing.assert_allclose(cwb, 0.48, rtol=1e-2)
 
-    cwb = coverage_width_based(y, y_low, y_up, eta=0.01, alpha=0.1)
+    cwb = coverage_width_based(y, y_low, y_up, eta=0.01, confidence_level=0.9)
     np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
 
-    cwb = coverage_width_based(y, y_low, y_up, eta=-1, alpha=0.1)
+    cwb = coverage_width_based(y, y_low, y_up, eta=-1, confidence_level=0.9)
     np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
 
-    cwb = coverage_width_based(y, y_low, y_up, eta=0, alpha=0.1)
+    cwb = coverage_width_based(y, y_low, y_up, eta=0, confidence_level=0.9)
     np.testing.assert_allclose(cwb, 0.65, rtol=1e-2)
 
 
@@ -823,5 +748,5 @@ def test_regression_mwi_score() -> None:
 
     alpha = 0.1
 
-    mwi_score = regression_mwi_score(y_true, y_pis, alpha)
+    mwi_score = regression_mwi_score(y_true, y_pis, 1 - alpha)
     np.testing.assert_allclose(mwi_score, 82.25, rtol=1e-2)

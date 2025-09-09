@@ -1,11 +1,17 @@
-.. title:: Theoretical Description : contents
+.. title:: Theoretical Description Classification : contents
 
 .. _theoretical_description_classification:
 
-=======================
+#######################
 Theoretical Description
-=======================
+#######################
 
+Note: in theoretical parts of the documentation, we use the following terms employed in the scientific literature:
+
+- `alpha` is equivalent to `1 - confidence_level`. It can be seen as a *risk level*
+- *calibrate* and *calibration*, are equivalent to *conformalize* and *conformalization*.
+
+—
 
 Three methods for multi-class uncertainty quantification have been implemented in MAPIE so far :
 LAC (that stands for Least Ambiguous set-valued Classifier) [1], Adaptive Prediction Sets [2, 3] and Top-K [3].
@@ -141,8 +147,10 @@ Despite the RAPS method having a relatively small set size, its coverage tends t
 of the last label in the prediction set. This randomization is done as follows:
 
 - First : define the :math:`V` parameter:
+
 .. math::
    V_i = (s_i(X_i, Y_i) - \hat{q}_{1-\alpha}) / \left(\hat{\mu}(X_i)_{\pi_k} + \lambda \mathbb{1} (k > k_{reg})\right)
+
 - Compare each :math:`V_i` to :math:`U \sim` Unif(0, 1)
 - If :math:`V_i \leq U`, the last included label is removed, else we keep the prediction set as it is.
 
@@ -158,14 +166,14 @@ By analogy with the CV+ method for regression, estimating the prediction sets is
 
 - We split the training set into *K* disjoint subsets :math:`S_1, S_2, ..., S_K` of equal size. 
   
-- *K* regression functions :math:`\hat{\mu}_{-S_k}` are fitted on the training set with the 
+- *K* classification functions :math:`\hat{\mu}_{-S_k}` are fitted on the training set with the 
   corresponding :math:`k^{th}` fold removed.
 
 - The corresponding *out-of-fold* conformity score is computed for each :math:`i^{th}` point 
 
 - Compare the conformity scores of training instances with the scores of each label for each new test point in order to
   decide whether or not the label should be included in the prediction set. 
-  For the APS method, the prediction set is constructed as follows (see equation 11 of [3]) : 
+  For the APS method, the prediction set is constructed as follows (see equation 11 of [2]) : 
 
 .. math:: 
     C_{n, \alpha}(X_{n+1}) = 
@@ -177,58 +185,8 @@ where :
 
 - :math:`E(X_{n+1}, y, U_{n+1}; \hat{\pi}^{k(i)})` is the conformity score of label :math:`y` from a new test point.
 
-
-
-
-.. The :class:`mapie.regression.MapieClassifier` class implements several conformal methods
-.. for estimating predictions sets, i.e. a set of possibilities that include the true label
-.. with a given confidence level.
-.. The full-conformal methods being computationally intractable, we will focus on the split-
-.. and cross-conformal methods. 
-
-.. Before describing the methods, let's briefly present the mathematical setting.
-.. For a classification problem in a standard independent and identically distributed
-.. (i.i.d) case, our training data :math:`(X, Y) = \{(x_1, y_1), \ldots, (x_n, y_n)\}`
-.. has an unknown distribution :math:`P_{X, Y}`. 
-
-.. Given some target quantile :math:`\alpha` or associated target coverage level :math:`1-\alpha`,
-.. we aim at constructing a set of possible labels :math:`\hat{T}_{n, \alpha} \in {1, ..., K}`
-.. for a new feature vector :math:`X_{n+1}` such that 
-
-.. .. math:: 
-..     P \{Y_{n+1} \in \hat{T}_{n, \alpha}(X_{n+1}) \} \geq 1 - \alpha
-
-
-.. 1. Split-conformal method
-.. -------------------------
-
-.. - In order to estimate prediction sets, one needs to "calibrate" so-called conformity scores
-..   on a given calibration set. The alpha-quantile of these conformity scores is then estimated
-..   and compared with the conformity scores of new test points output by the base model to assess
-..   whether a label must be included in the prediction set
-
-.. - The split-conformal methodology can be summarized in the scheme below : 
-..     - The training set is first split into a training set and a calibration set
-..     - The training set is used for training the model
-..     - The calibration set is only used for getting distribution of conformity scores output by
-..       the model trained only on the training set. 
-
-
-.. 2. The "score" method
-.. ---------------------
-
-.. 3. The "cumulated score" method
-.. -------------------------------
-
-.. 4. The cross-conformal method
-.. -----------------------------
-
-
-
-.. TO BE CONTINUED
-
-5. References
--------------
+References
+----------
 
 [1] Mauricio Sadinle, Jing Lei, & Larry Wasserman.
 "Least Ambiguous Set-Valued Classifiers With Bounded Error Levels."

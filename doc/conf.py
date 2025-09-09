@@ -14,7 +14,9 @@
 
 import os
 import sys
+from distutils.version import LooseVersion
 
+import sphinx
 import sphinx_gallery
 import sphinx_rtd_theme
 
@@ -42,22 +44,20 @@ extensions = [
     "numpydoc",
     "sphinx_gallery.gen_gallery",
 ]
-mathjax_path = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
-
+mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
 
 # this is needed for some reason...
 # see https://github.com/numpy/numpydoc/issues/69
 numpydoc_show_class_members = False
 
-from distutils.version import LooseVersion
-
 # pngmath / imgmath compatibility layer for different sphinx versions
-import sphinx
-
 if LooseVersion(sphinx.__version__) < LooseVersion("1.4"):
     extensions.append("sphinx.ext.pngmath")
 else:
     extensions.append("sphinx.ext.imgmath")
+
+# Ensure imgmath_latex is correctly set
+imgmath_latex = 'latex'
 
 autodoc_default_flags = ["members", "inherited-members"]
 
@@ -66,6 +66,10 @@ templates_path = ["_templates"]
 
 # generate autosummary even if no references
 autosummary_generate = True
+
+
+autosectionlabel_prefix_document = True
+autosectionlabel_maxdepth = 2
 
 # The suffix of source filenames.
 source_suffix = ".rst"
@@ -88,7 +92,7 @@ copyright = u"2022, Quantmetry"
 # built documents.
 #
 # The short X.Y version.
-version = "0.8.3"
+version = "1.0.1"
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -143,7 +147,9 @@ html_theme = "sphinx_rtd_theme"
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-# html_theme_options = {}
+html_theme_options = {
+    'collapse_navigation': False,
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
@@ -316,13 +322,15 @@ sphinx_gallery_conf = {
         "../examples/regression",
         "../examples/classification",
         "../examples/multilabel_classification",
-        "../examples/calibration"
+        "../examples/calibration",
+        "../examples/mondrian",
     ],
     "gallery_dirs": [
         "examples_regression",
         "examples_classification",
         "examples_multilabel_classification",
-        "examples_calibration"
+        "examples_calibration",
+        "examples_mondrian",
     ],
     "doc_module": "mapie",
     "backreferences_dir": os.path.join("generated"),

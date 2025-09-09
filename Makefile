@@ -1,32 +1,48 @@
+### Config ###
 .PHONY: tests doc build
 
+
+### Checks that are run in GitHub CI ###
 lint:
-	flake8 . --exclude=doc
+	flake8 examples mapie notebooks --max-line-length=88
 
 type-check:
 	mypy mapie
 
-tests:
-	pytest -vs --doctest-modules mapie
-
 coverage:
-	pytest -vs \
-		--doctest-modules \
+	pytest -vsx \
 		--cov-branch \
 		--cov=mapie \
 		--cov-report term-missing \
 		--pyargs mapie \
 		--cov-fail-under=100 \
-		--cov-config=.coveragerc
+		--no-cov-on-fail \
+		--doctest-modules
 
+
+### Checks that are run in ReadTheDocs CI ###
 doc:
 	$(MAKE) html -C doc
+
+doctest:
+	# Tests .. testcode:: blocks in documentation, among other things
+	$(MAKE) doctest -C doc
+
+
+### Other utilities (for local use) ###
+all-checks:
+	$(MAKE) lint
+	$(MAKE) type-check
+	$(MAKE) coverage
+
+tests:
+	pytest -vs --doctest-modules mapie
 
 clean-doc:
 	$(MAKE) clean -C doc
 
 build:
-	python setup.py sdist bdist_wheel
+	python -m build
 
 clean-build:
 	rm -rf build dist MAPIE.egg-info

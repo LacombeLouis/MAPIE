@@ -3,38 +3,44 @@ name: Unit tests
 on:
   push:
     branches:
-      -dev
-      -main
-      -master
+      - master
   pull_request:
 
 jobs:
+  get-latest-python:
+    runs-on: ubuntu-latest
+    outputs:
+      latest-python: ${{ steps.latest.outputs.version }}
+    steps:
+      - uses: snok/latest-python-versions@v1
+        id: latest
+        with:
+          min-version: "3.13"
+
   build:
+    needs: get-latest-python
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            python-version: "3.7"
-            numpy-version: 1.21.4
-          - os: ubuntu-latest
-            python-version: "3.8"
-            numpy-version: 1.21.4
+          # minimum supported dependencies
           - os: ubuntu-latest
             python-version: "3.9"
-            numpy-version: 1.21.4
+            numpy-version: "=1.23"
+            sklearn-version: "=1.4"
+          # latest stable dependencies
           - os: ubuntu-latest
-            python-version: "3.10"
-            numpy-version: 1.22.4
-          - os: ubuntu-latest
-            python-version: "3.11"
-            numpy-version: 1.25.2
+            python-version: "${{ needs.get-latest-python.outputs.latest-python }}"
+            numpy-version: ""
+            sklearn-version: ""
           - os: windows-latest
-            python-version: "3.11"
-            numpy-version: 1.25.2
+            python-version: "${{ needs.get-latest-python.outputs.latest-python }}"
+            numpy-version: ""
+            sklearn-version: ""
           - os: macos-latest
-            python-version: "3.11"
-            numpy-version: 1.25.2
+            python-version: "${{ needs.get-latest-python.outputs.latest-python }}"
+            numpy-version: ""
+            sklearn-version: ""
     defaults:
       run:
         shell: bash -l {0}
@@ -48,13 +54,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           environment-file: environment.ci.yml
           channels: defaults, conda-forge
+          miniconda-version: "latest"
       - name: Install numpy
-        run: conda install numpy=${{ matrix.numpy-version }}
+        run: conda install numpy${{ matrix.numpy-version }}
+      - name: Install sklearn
+        run: conda install scikit-learn${{ matrix.sklearn-version }}
       - name: Check linting
         run: make lint
       - name: Check static typing
         run: make type-check
-      - name: Test with pytest
+      - name: Test and coverage with pytest
         run: make coverage
       - name: Code coverage
         run: codecov

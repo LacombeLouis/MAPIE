@@ -8,6 +8,8 @@ Development Lead
 * Thibault Cordier <thibault.a.cordier@capgemini.com>
 * Vincent Blot <vincent.blot@capgemini.com>
 * Louis Lacombe <louis.lacombe@capgemini.com>
+* Valentin Laurent <valentin.laurent@capgemini.com>
+* Hussein Jawad <hussein.jawad@capgemini.com>
 
 Emeritus Core Developers
 ------------------------
@@ -40,4 +42,13 @@ Contributors
 * Pierre de Fréminville <pidefrem>
 * Ambros Marzetta <ambrosm>
 * Carl McBride Ellis <Carl-McBride-Ellis>
+* Baptiste Calot <baptiste.calot@capgemini.com>
+* Leonardo Garma <leonardo.garma@gmail.com>
+* Mohammed Jawhar <mohammedjawhar365@gmail.com>
+* Syed Affan <saffand03@gmail.com>
+* Cyprien Bertran <cbertrandebalanda@yahoo.fr>
+* Brijesh Thummar <brijeshthummar02@gmail.com>
+* Faustin Pulvéric <faustin.pulveric@gmail.com>
+* Chaoqi Zhang <prncoprs@163.com>
+* Leena Kamran Qidwai
 To be continued ...

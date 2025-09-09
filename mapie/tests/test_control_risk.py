@@ -7,7 +7,7 @@ from typing import List, Optional, Union
 import numpy as np
 import pytest
 
-from mapie._typing import NDArray
+from numpy.typing import NDArray
 from mapie.control_risk.ltt import find_lambda_control_star, ltt_procedure
 from mapie.control_risk.p_values import compute_hoeffdding_bentkus_p_value
 from mapie.control_risk.risks import (compute_risk_precision,
@@ -81,7 +81,7 @@ def test_recall_with_zero_sum_is_equal_nan() -> None:
     y_toy = np.zeros((4, 3))
     y_preds_proba = prng.rand(4, 3, 1)
     recall = compute_risk_recall(lambdas, y_preds_proba, y_toy)
-    np.testing.assert_array_equal(recall, np.empty_like(recall))
+    np.testing.assert_array_equal(recall, np.full_like(recall, np.nan))
 
 
 def test_precision_with_zero_sum_is_equal_ones() -> None:
@@ -173,13 +173,13 @@ def test_warning_valid_index_empty() -> None:
 
 def test_invalid_alpha_hb() -> None:
     """Test error message when invalid alpha"""
-    with pytest.raises(ValueError, match=r".*Invalid alpha"):
+    with pytest.raises(ValueError, match=r".*Invalid confidence_level"):
         compute_hoeffdding_bentkus_p_value(r_hat, n, wrong_alpha)
 
 
 def test_invalid_shape_alpha_hb() -> None:
     """Test error message when invalid alpha shape"""
-    with pytest.raises(ValueError, match=r".*Invalid alpha"):
+    with pytest.raises(ValueError, match=r".*Invalid confidence_level"):
         compute_hoeffdding_bentkus_p_value(r_hat, n, wrong_alpha_shape)
 
 

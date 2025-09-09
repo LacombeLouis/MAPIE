@@ -15,8 +15,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder
 
-from mapie.calibration import MapieCalibrator
-from mapie.metrics import expected_calibration_error, top_label_ece
+from mapie.calibration import TopLabelCalibrator
+from mapie.metrics.calibration import top_label_ece
+from mapie.metrics.calibration import expected_calibration_error
 
 random_state = 20
 
@@ -59,19 +60,19 @@ results = {
 results_binary = {
     "split": {
         "y_score": [
-            [0.76226014, np.nan],
-            [0.39557708, np.nan],
+            [0.74020596, np.nan],
+            [0.4247601, np.nan],
             [np.nan, 0.66666667],
-            [0.75506701, np.nan],
+            [0.72980855, np.nan],
             [np.nan, 0.66666667],
-            [0.81175724, np.nan],
-            [0.77294068, np.nan],
-            [0.62599563, np.nan],
+            [0.81058943, np.nan],
+            [0.7551083, np.nan],
+            [0.59798388, np.nan],
             [np.nan, 0.66666667],
             [np.nan, 0.66666667],
         ],
-        "top_label_ece": 0.30562,
-        "ece": 0.56657,
+        "top_label_ece": 0.315922,
+        "ece": 0.554227,
     },
     "prefit": {
         "y_score": [
@@ -109,20 +110,19 @@ X_train, X_calib, y_train, y_calib = train_test_split(
 
 def test_initialized() -> None:
     """Test that initialization does not crash."""
-    MapieCalibrator()
+    TopLabelCalibrator()
 
 
 def test_default_parameters() -> None:
     """Test default values of input parameters."""
-    mapie_cal = MapieCalibrator()
-    assert mapie_cal.method == "top_label"
+    mapie_cal = TopLabelCalibrator()
     assert mapie_cal.calibrator is None
     assert mapie_cal.cv == "split"
 
 
 def test_default_fit_params() -> None:
     """Test default sample weights and other parameters."""
-    mapie_cal = MapieCalibrator()
+    mapie_cal = TopLabelCalibrator()
     assert (
         signature(mapie_cal.fit).parameters["sample_weight"].default
         is None
@@ -151,7 +151,7 @@ def test_false_str_estimator() -> None:
         ValueError,
         match=r".*Please provide a string in*",
     ):
-        mapie_cal = MapieCalibrator(
+        mapie_cal = TopLabelCalibrator(
             calibrator="not_estimator"
         )
         mapie_cal.fit(X, y)
@@ -159,7 +159,7 @@ def test_false_str_estimator() -> None:
 
 def test_estimator_none() -> None:
     """Test that no input for calibrator will return a sigmoid"""
-    mapie_cal = MapieCalibrator()
+    mapie_cal = TopLabelCalibrator()
     mapie_cal.fit(X, y)
     assert isinstance(
         mapie_cal.calibrators[list(mapie_cal.calibrators.keys())[0]],
@@ -171,7 +171,7 @@ def test_check_type_of_target() -> None:
     """Test the type of target."""
     X = [0.5, 0.2, 0.4, 0.8, 3.8]
     y = [0.4, 0.2, 3.6, 3, 0.2]
-    mapie_cal = MapieCalibrator()
+    mapie_cal = TopLabelCalibrator()
     with pytest.raises(
         ValueError,
         match=r".*Make sure to have one of the allowed targets:*"
@@ -179,26 +179,16 @@ def test_check_type_of_target() -> None:
         mapie_cal.fit(X, y)
 
 
-def test_other_methods() -> None:
-    """Test that invalid string for method returns error"""
-    with pytest.raises(
-        ValueError,
-        match=r".*Invalid method, allowed method are*",
-    ):
-        mapie_cal = MapieCalibrator(method="no_method")
-        mapie_cal.fit(X, y)
-
-
 def test_prefit_cv_argument() -> None:
     """Test that prefit method works"""
     est = RandomForestClassifier().fit(X, y)
-    mapie_cal = MapieCalibrator(estimator=est, cv="prefit")
+    mapie_cal = TopLabelCalibrator(estimator=est, cv="prefit")
     mapie_cal.fit(X, y)
 
 
 def test_split_cv_argument() -> None:
     """Test that split method works"""
-    mapie_cal = MapieCalibrator(cv="split")
+    mapie_cal = TopLabelCalibrator(cv="split")
     mapie_cal.fit(X, y)
 
 
@@ -209,7 +199,7 @@ def test_invalid_cv_argument(cv: str) -> None:
         ValueError,
         match=r".*Invalid cv argument*",
     ):
-        mapie_cal = MapieCalibrator(cv=cv)
+        mapie_cal = TopLabelCalibrator(cv=cv)
         mapie_cal.fit(X, y)
 
 
@@ -218,10 +208,10 @@ def test_prefit_split_same_results() -> None:
     est = RandomForestClassifier(
         random_state=random_state
     ).fit(X_train, y_train)
-    mapie_cal_prefit = MapieCalibrator(estimator=est, cv="prefit")
+    mapie_cal_prefit = TopLabelCalibrator(estimator=est, cv="prefit")
     mapie_cal_prefit.fit(X_calib, y_calib)
 
-    mapie_cal_split = MapieCalibrator(
+    mapie_cal_split = TopLabelCalibrator(
         estimator=RandomForestClassifier(random_state=random_state)
     )
     mapie_cal_split.fit(
@@ -241,7 +231,7 @@ def test_not_seen_calibrator() -> None:
         UserWarning,
         match=r".*WARNING: This predicted label*"
     ):
-        mapie_cal = MapieCalibrator()
+        mapie_cal = TopLabelCalibrator()
         mapie_cal.fit(X, y)
         mapie_cal.calibrators.clear()
         mapie_cal.predict_proba(X)
@@ -254,7 +244,7 @@ def test_shape_of_output(
     estimator: ClassifierMixin
 ) -> None:
     """Test that the size of the outputs are coherent."""
-    mapie_cal = MapieCalibrator(
+    mapie_cal = TopLabelCalibrator(
         estimator=estimator,
         calibrator=calibrator,
     )
@@ -268,7 +258,7 @@ def test_number_of_classes_equal_calibrators() -> None:
     Test that the number of calibrators is the same as the number
     of classes in the calibration step.
     """
-    mapie_cal = MapieCalibrator()
+    mapie_cal = TopLabelCalibrator()
     mapie_cal.fit(
         X=X_,
         y=y_,
@@ -280,7 +270,7 @@ def test_number_of_classes_equal_calibrators() -> None:
 
 def test_same_predict() -> None:
     """Test that the same prediction is made regardless of the calibration."""
-    mapie_cal = MapieCalibrator(method="top_label")
+    mapie_cal = TopLabelCalibrator()
     mapie_cal.fit(
         X=X_,
         y=y_,
@@ -299,13 +289,13 @@ def test_same_predict() -> None:
     )
 
 
-@pytest.mark.parametrize("cv", MapieCalibrator.valid_cv)
+@pytest.mark.parametrize("cv", TopLabelCalibrator.valid_cv)
 def test_correct_results(cv: str) -> None:
     """
     Test that the y_score and top label score from the test dataset result
     in the correct scores (in a multi-class setting).
     """
-    mapie_cal = MapieCalibrator(cv=cv)
+    mapie_cal = TopLabelCalibrator(cv=cv)
     mapie_cal.fit(
         X=X_,
         y=y_,
@@ -314,7 +304,9 @@ def test_correct_results(cv: str) -> None:
     pred_ = mapie_cal.predict_proba(X_test)
     top_label_ece_ = top_label_ece(y_test, pred_)
     np.testing.assert_array_almost_equal(
-        results[cv]["y_score"], pred_  # type:ignore
+        np.array(results[cv]["y_score"]),
+        np.array(pred_),
+        decimal=2
     )
     np.testing.assert_allclose(  # type:ignore
         results[cv]["top_label_ece"],
@@ -323,7 +315,7 @@ def test_correct_results(cv: str) -> None:
     )
 
 
-@pytest.mark.parametrize("cv", MapieCalibrator.valid_cv)
+@pytest.mark.parametrize("cv", TopLabelCalibrator.valid_cv)
 def test_correct_results_binary(cv: str) -> None:
     """
     Test that the y_score and top label score from the test dataset result
@@ -335,7 +327,7 @@ def test_correct_results_binary(cv: str) -> None:
         n_informative=4,
         random_state=random_state
     )
-    mapie_cal = MapieCalibrator(cv=cv)
+    mapie_cal = TopLabelCalibrator(cv=cv)
     mapie_cal.fit(
         X=X_binary,
         y=y_binary,
@@ -345,7 +337,9 @@ def test_correct_results_binary(cv: str) -> None:
     top_label_ece_ = top_label_ece(y_binary, pred_)
     ece = expected_calibration_error(y_binary, pred_)
     np.testing.assert_array_almost_equal(
-        results_binary[cv]["y_score"], pred_  # type:ignore
+        np.array(results_binary[cv]["y_score"]),
+        np.array(pred_),
+        decimal=2
     )
     np.testing.assert_allclose(  # type:ignore
         results_binary[cv]["top_label_ece"],
@@ -370,17 +364,17 @@ def test_different_binary_y_combinations() -> None:
         n_informative=4,
         random_state=random_state
     )
-    mapie_cal = MapieCalibrator()
+    mapie_cal = TopLabelCalibrator()
     mapie_cal.fit(X_comb, y_comb, random_state=random_state)
     y_score = mapie_cal.predict_proba(X_comb)
 
     y_comb1 = np.where(y_comb == 2, 3, y_comb)
-    mapie_cal1 = MapieCalibrator()
+    mapie_cal1 = TopLabelCalibrator()
     mapie_cal1.fit(X_comb, y_comb1, random_state=random_state)
     y_score1 = mapie_cal1.predict_proba(X_comb)
 
     y_comb2 = np.where(y_comb == 2, 40, y_comb)
-    mapie_cal2 = MapieCalibrator()
+    mapie_cal2 = TopLabelCalibrator()
     mapie_cal2.fit(X_comb, y_comb2, random_state=random_state)
     y_score2 = mapie_cal2.predict_proba(X_comb)
     np.testing.assert_array_almost_equal(y_score, y_score1)
@@ -412,9 +406,9 @@ def test_results_with_constant_sample_weights(
     """
     n_samples = len(X)
     estimator = RandomForestClassifier(random_state=random_state)
-    mapie_clf0 = MapieCalibrator(estimator=estimator, calibrator=calibrator)
-    mapie_clf1 = MapieCalibrator(estimator=estimator, calibrator=calibrator)
-    mapie_clf2 = MapieCalibrator(estimator=estimator, calibrator=calibrator)
+    mapie_clf0 = TopLabelCalibrator(estimator=estimator, calibrator=calibrator)
+    mapie_clf1 = TopLabelCalibrator(estimator=estimator, calibrator=calibrator)
+    mapie_clf2 = TopLabelCalibrator(estimator=estimator, calibrator=calibrator)
     mapie_clf0.fit(X, y, sample_weight=None, random_state=random_state)
     mapie_clf1.fit(
         X, y, sample_weight=np.ones(shape=n_samples),
@@ -458,7 +452,7 @@ def test_pipeline_compatibility() -> None:
     )
     pipe = make_pipeline(preprocessor, LogisticRegression())
     pipe.fit(X, y)
-    mapie = MapieCalibrator(estimator=pipe)
+    mapie = TopLabelCalibrator(estimator=pipe)
     mapie.fit(X, y)
     mapie.predict(X)
 
@@ -471,7 +465,7 @@ def test_fit_parameters_passing() -> None:
     """
     gb = GradientBoostingClassifier(random_state=random_state)
 
-    mapie = MapieCalibrator(estimator=gb)
+    mapie = TopLabelCalibrator(estimator=gb)
 
     def early_stopping_monitor(i, est, locals):
         """Returns True on the 3rd iteration."""
