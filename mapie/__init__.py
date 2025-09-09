@@ -6,6 +6,7 @@ from . import (
     risk_control,
     calibration,
     subsample,
+    hallucination,
 )
 from ._version import __version__
 
@@ -17,5 +18,6 @@ __all__ = [
     "metrics",
     "utils",
     "subsample",
+    "hallucination",
     "__version__"
 ]
